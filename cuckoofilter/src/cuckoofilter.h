@@ -4,6 +4,7 @@
 #include <assert.h>
 #include <algorithm>
 #include <unordered_map>
+#include <set>
 
 #include "debug.h"
 #include "hashutil.h"
@@ -22,6 +23,9 @@ enum Status {
 
 // maximum number of cuckoo kicks before claiming failure
 const size_t kMaxCuckooCount = 500;
+
+// max number of rehashes for a given bucket before claiming failure
+const size_t maxRehashCount = 500;
 
 // A cuckoo filter class exposes a Bloomier filter interface,
 // providing methods of Add, Delete, Contain. It takes three
@@ -50,18 +54,33 @@ class CuckooFilter {
 
   HashFamily hasher_;
 
-  unordered_map<size_t, pair<vector<uint64_t>, vector<uint32_t>>> r_itemtagmap; // pair<item, tag>
-  unordered_map<size_t, pair<vector<uint64_t>, vector<uint32_t>>> s_itemtagmap;
-  // unordered_map<size_t, vector<uint32_t>> r_tagmap;
-  // unordered_map<size_t, vector<uint32_t>> s_tagmap;
+  unordered_map<size_t, vector<ItemType>> r_items;
+  unordered_map<size_t, vector<ItemType>> s_items;
+  unordered_map<size_t, set<uint32_t>> r_tagmap;
+  unordered_map<size_t, set<uint32_t>> s_tagmap;
+
   size_t *indices;
+
+  void IndicesInfo() const {
+    size_t maxRehashCount = 0;
+    size_t totalRehashCount = 0;
+    // cout << "resulting indices:\n";
+    for(uint32_t i = 0; i < table_->NumBuckets(); i++) {
+      if(indices[i] > maxRehashCount)
+        maxRehashCount = indices[i];
+      if(indices[i] > 0)
+        totalRehashCount++;
+      //   cout << indices[i] << " ";
+    }
+    cout << "\nmax rehash count: " << maxRehashCount << "\ntotal rehash count: " << totalRehashCount << "\n";
+  }
 
   template<typename key, typename value>
   void PrintMap(unordered_map<key, value> &map) const {
     cout << "\nprinting map...\n{\n";
-    for(auto const& pair : map) {
+    for(auto const& pair : map) { // each bucket
       cout << pair.first << " : [ "; 
-      for(uint32_t const& i : pair.second) {
+      for(auto const& i : pair.second) {
         cout << i << " ";
       }
       cout << "]\n";
@@ -69,19 +88,33 @@ class CuckooFilter {
     cout << "}\n\n";
   }
 
+  void PrintBucket(set<uint32_t> &bucket, size_t i) const { // TODO: reuse this in PrintMap
+    cout << "\nbucket " << i << " (" << bucket.size() << "):\n";
+    for(auto t : bucket)
+      cout << t << " ";
+    cout << "\n";
+  }
+
+// returns true on first match/collision, otherwise  returns false
 template <class R, class S>
-bool CollisionCheck(R Rfirst, R Rlast, S Sfirst, S Slast) {
+bool TagCollision(R Rfirst, R Rlast, S Sfirst, S Slast) {
   while(Rfirst != Rlast && Sfirst != Slast) {
     if(*Rfirst < *Sfirst)
       ++Rfirst;
     else if(*Sfirst < *Rfirst)
       ++Sfirst;
-    else
+    else {
+      cout << "collision on tag " << *Rfirst << "\n";
       return true;
+    }
   }
   return false;
 }
 
+  inline size_t GenerateIndexHash(const ItemType& item) const {
+    uint64_t hash = hasher_(item);
+    return IndexHash(hash >> 32);
+  }
 
   inline size_t IndexHash(uint32_t hv) const {
     // table_->num_buckets is always a power of two, so modulo can be replaced
@@ -98,10 +131,22 @@ bool CollisionCheck(R Rfirst, R Rlast, S Sfirst, S Slast) {
   }
 
   inline void GenerateIndexTagHash(const ItemType& item, size_t* index,
-                                   uint32_t* tag) const {
-    const uint64_t hash = hasher_(item);
+                                   uint32_t* tag, size_t i = 0) const { // i = index thing to concat for rehash
+    uint64_t hash;
+    if(i) {
+      // string s1 = to_string(item);
+      // string s2 = to_string(i);
+      // cout << "concat " << item << " & " << i << '\n';
+      // string s = s1 + s2;
+
+      // cout << "item: " << item << " concat: " << item * 10 + i << "\n";
+      size_t c = item * 10 + i;
+      hash = hasher_(c); // stoi not large enough
+    } else {
+      hash = hasher_(item);
+      *index = IndexHash(hash >> 32);
+    }
     // cout << "hash: " << hash << "\n";
-    *index = IndexHash(hash >> 32);
     *tag = TagHash(hash);
   }
 
@@ -131,20 +176,22 @@ bool CollisionCheck(R Rfirst, R Rlast, S Sfirst, S Slast) {
     // cout << "num buckets: " << num_buckets << "\n";
     victim_.used = false;
     indices = new size_t[num_buckets](); // () initializes all values to 0
-    // for(int i = 0; i < sizeof(indices); i++) {
+    // for(uint8_t i = 0; i < num_buckets; i++) {
     //   cout << indices[i] << "\n";
     // }
-    // cout << "indices array size: " << (sizeof(indices)/sizeof(*indices)) << "\n";
     table_ = new TableType<bits_per_item>(num_buckets);
   }
 
   ~CuckooFilter() { delete table_; delete[] indices;}
 
   // Try hashing item for filter, returns i (index of bucket) and tag (fingerprint)
-  Status TryHash(vector<ItemType> &r, vector<ItemType> &s);
+  Status HashAll(vector<ItemType> &r, vector<ItemType> &s);
 
   // Compares tags at each bucket between r and s, rehash the tag exists in both r and s at the same bucket
   Status RehashCheck(); // unordered_map<size_t, vector<uint32_t>> &r_tagmap, unordered_map<size_t, vector<uint32_t>> &s_tagmap);
+
+  // Rehashes tags at a given bucket index
+  Status RehashBucket(size_t i);
 
   // Add an item to the filter.
   Status Add(const ItemType &item);
@@ -168,7 +215,7 @@ bool CollisionCheck(R Rfirst, R Rlast, S Sfirst, S Slast) {
 
 template <typename ItemType, size_t bits_per_item,
           template <size_t> class TableType, typename HashFamily>
-Status CuckooFilter<ItemType, bits_per_item, TableType, HashFamily>::TryHash( // Modifying Add to return i and tag without physically inserting to filter
+Status CuckooFilter<ItemType, bits_per_item, TableType, HashFamily>::HashAll( // Modifying Add to return i and tag without physically inserting to filter
     vector<ItemType> &r, vector<ItemType> &s) {
       size_t it = 0;
 
@@ -180,92 +227,118 @@ Status CuckooFilter<ItemType, bits_per_item, TableType, HashFamily>::TryHash( //
         // get item from both r and s
         const ItemType &r_item = r.at(it);
         const ItemType &s_item = s.at(it);
-        
+
         // hash both items to get index and tag
         GenerateIndexTagHash(r_item, &r_index, &r_tag);
         GenerateIndexTagHash(s_item, &s_index, &s_tag);
-
         // cout << "r_index = " << r_index << " r_tag = " << r_tag << "\n";
         // cout << "s_index = " << s_index << " s_tag = " << s_tag << "\n";
 
-        // unordered_map<size_t, vector<pair<uint64_t, uint32_t>>> r_itemtagmap; // pair<item, tag>
-
-        // insert into maps -> i : vector<pair<item, tag>>
-        auto pr1 = r_itemtagmap.insert(make_pair(r_index, vector<pair<uint64_t, uint32_t>>(1, make_pair(r_item, r_tag))));
-        if(!pr1.second) {
-          pr1.first->second.push_back(make_pair(r_item, r_tag));
+        r_tagmap[r_index].insert(r_tag);
+        auto r_pr = r_items.insert(make_pair(r_index, vector<uint64_t>(1, r_item)));
+        if(!r_pr.second) {
+          r_pr.first->second.push_back(r_item);
         }
-        // cout << "r vector size? " << pr1.first->second.size() << "\n"; // output is tags associated with the bucket (vector size for specific key)
 
-        auto pr2 = s_itemtagmap.insert(make_pair(s_index, vector<pair<uint64_t, uint32_t>>(1, make_pair(s_item, s_tag))));
-        if(!pr2.second) {
-          pr2.first->second.push_back(make_pair(s_item, s_tag));
+        s_tagmap[s_index].insert(s_tag);
+        auto s_pr = s_items.insert(make_pair(s_index, vector<uint64_t>(1, s_item)));
+        if(!s_pr.second) {
+          s_pr.first->second.push_back(s_item);
         }
-        // cout << "s vector size? " << pr2.first->second.size() << "\n\n";
         it++;
       }
+
       while(it < s.size()) { // TODO: improve scrappy implementation based on assumption that r.size() < s.size(). 
         size_t i;
         uint32_t tag;
         const ItemType &item = s.at(it);
         GenerateIndexTagHash(item, &i, &tag);
         // cout << "hashing rest of s: i = " << i << " tag = " << tag << "\n";
-        auto pr = s_itemtagmap.insert(make_pair(i, vector<pair<uint64_t, uint32_t>>(1, make_pair(item, tag))));
+        s_tagmap[i].insert(tag);
+        auto pr = s_items.insert(make_pair(i, vector<uint64_t>(1, item)));
         if(!pr.second) {
-          pr.first->second.push_back(make_pair(item, tag));
+          pr.first->second.push_back(item);
         }
         it++;
       }
-      // TODO: update PrintMap() for upgraded itemtagmap DS
-      // TODO: also consider unordered_map<index, array[vector<items>, vector<tags>]??
-      // PrintMap(r_itemtagmap);
-      // PrintMap(s_itemtagmap);
-      RehashCheck();
-  return Ok;
+
+      return RehashCheck();
 }
 
 template <typename ItemType, size_t bits_per_item,
           template <size_t> class TableType, typename HashFamily>
 Status CuckooFilter<ItemType, bits_per_item, TableType, HashFamily>::RehashCheck() {
-  // unordered_map<size_t, vector<uint32_t>> &r_tagmap, unordered_map<size_t, vector<uint32_t>> &s_tagmap) {
     cout << "\nComparing tags for potential rehashing..." << "\n";
-    // cout << "num buckets: " << table_->NumBuckets() << "\n";
-    for(int i = 0; i < int(table_->NumBuckets()); i++) {
+    for(uint i = 0; i < table_->NumBuckets(); i++) {
       // if no tags in a bucket, skip
-      if(r_itemtagmap.find(i) == r_itemtagmap.end())
+      if(r_tagmap.find(i) == r_tagmap.end())
         continue;
-      else if(s_itemtagmap.find(i) == s_itemtagmap.end())
+      else if(s_tagmap.find(i) == s_tagmap.end())
         continue;
       // buckets exist, compare tags
       else {
-        // TODO: reusable function to print each bucket
-
         // cout << "bucket " << i << " exists for r and s" << "\n";
-        vector<pair<uint64_t, uint32_t>> &r_pairs = r_itemtagmap.find(i)->second;
-        cout << "\nbucket " << i << " in r (" << r_pairs.size() << "):\n";
-        for(auto r : r_pairs)
-          cout << r.first << " : " << r.second << " | ";
+        set<uint32_t> &r_tags = r_tagmap[i];
+        set<uint32_t> &s_tags = s_tagmap[i];
 
-        vector<pair<uint64_t, uint32_t>> &s_pairs = s_itemtagmap.find(i)->second;
-        cout << "\nbucket " << i << " in s (" << s_pairs.size() << "):\n";
-        for(auto s : s_pairs)
-          cout << s.first << " : " << s.second << " | ";
-        cout << "\n";
-        if(CollisionCheck(r_pairs.begin(), r_pairs.end(), s_pairs.begin(), s_pairs.end())) {
-          cout << "beep beep collision" << "\n";
+        // rehash bucket until no matching tags between r and s
+        while(TagCollision(r_tags.begin(), r_tags.end(), s_tags.begin(), s_tags.end())) {
+          cout << "beep beep collision at bucket " << i << "\n";
+          // PrintBucket(r_tagmap[i], i);
+          // PrintBucket(s_tagmap[i], i);
+          if(RehashBucket(i) == NotSupported)
+            return NotSupported;
         }
-        /*
-        vector<uint32_t> match(r_pairs.size() + s_pairs.size());
-        vector<uint32_t>::iterator it, st;
-        it = set_intersection(r_pairs.begin(), r_pairs.end(), s_pairs.begin(), s_pairs.end(), match.begin());
-        cout << "\nCommon elements:\n"; 
-        for (st = match.begin(); st != it; ++st) 
-            cout << *st << ", "; 
-        cout << "\n";
-        */
+        // implement add here
+        for(auto c : r_tagmap[i]) {
+          if(AddImpl(i, c) == Ok) {
+            // count to verify idk
+          }
+        }
       }
     }
+    // cout << "final tagmaps:\n";
+    // PrintMap(r_tagmap);
+    // PrintMap(s_tagmap);
+    IndicesInfo();
     return Ok;
+}
+
+template <typename ItemType, size_t bits_per_item,
+          template <size_t> class TableType, typename HashFamily>
+Status CuckooFilter<ItemType, bits_per_item, TableType, HashFamily>::RehashBucket(size_t i) {
+  // empty to rehash
+  r_tagmap[i].clear();
+  s_tagmap[i].clear();
+
+  if(indices[i] > maxRehashCount) {
+    cout << "rehash fail on bucket " << i << "\n";
+    IndicesInfo();
+    return NotSupported; // temp. constraint - max number of rehashes for a given bucket before claiming failure
+  }
+  indices[i]++;
+  cout << "inc. to " << indices[i] << "\n";
+  vector<ItemType> &r = r_items[i];
+  vector<ItemType> &s = s_items[i];
+  size_t it = 0;
+  while(it < r.size()) {
+    uint32_t r_tag;
+    uint32_t s_tag;
+    GenerateIndexTagHash(r.at(it), &i, &r_tag, indices[i]);
+    GenerateIndexTagHash(s.at(it), &i, &s_tag, indices[i]);
+    r_tagmap[i].insert(r_tag);
+    s_tagmap[i].insert(s_tag);
+    it++;
+  }
+
+  while(it < s.size()) {
+    uint32_t tag;
+    GenerateIndexTagHash(s.at(it), &i, &tag, indices[i]);
+    s_tagmap[i].insert(tag);
+    it++;
+  }
+
+  return Ok;
 }
 
 template <typename ItemType, size_t bits_per_item,
@@ -279,7 +352,7 @@ Status CuckooFilter<ItemType, bits_per_item, TableType, HashFamily>::Add(
     return NotEnoughSpace;
   }
   GenerateIndexTagHash(item, &i, &tag);
-  cout << "in Add: i = " << i << " tag = " << tag << "\n"; // i = index of chosen bucket, tag = fingerprint
+  // cout << "in Add: i = " << i << " tag = " << tag << "\n"; // i = index of chosen bucket, tag = fingerprint
   return AddImpl(i, tag);
 }
 
@@ -318,7 +391,8 @@ Status CuckooFilter<ItemType, bits_per_item, TableType, HashFamily>::Contain(
   size_t i1, i2;
   uint32_t tag;
 
-  GenerateIndexTagHash(key, &i1, &tag);
+  i1 = GenerateIndexHash(key);
+  GenerateIndexTagHash(key, &i1, &tag, indices[i1]);
   i2 = AltIndex(i1, tag);
 
   assert(i1 == AltIndex(i2, tag));
