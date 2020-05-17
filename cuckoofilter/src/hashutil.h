@@ -57,7 +57,7 @@ class TwoIndependentMultiplyShift {
       *v = random();
       for (int i = 1; i <= 4; ++i) {
         *v = *v << 32;
-        *v |= random();
+        *v |= random(); // bitwise OR
       }
     }
   }

@@ -196,7 +196,7 @@ class SingleTable {
       }
     }
     if (kickout) {
-      size_t r = rand() % kTagsPerBucket;
+      size_t r = rand() % kTagsPerBucket; // picks random tag to kick
       oldtag = ReadTag(i, r);
       WriteTag(i, r, tag);
     }
