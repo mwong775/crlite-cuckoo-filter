@@ -14,33 +14,9 @@ void random_gen(int n, vector<uint64_t> &store, mt19937 &rd)
         store[i] = (uint64_t(rd()) << 32) + rd();
 }
 
-int main(int argc, char **argv) {
-    int seed = 1;
-    mt19937 rd(seed);
-
-    int total_items = 100000;
-    cuckoofilter::CuckooFilter<size_t, 16> cf(total_items);
-    vector<uint64_t> r;
-    vector<uint64_t> s;
-
-    random_gen(total_items, r, rd);
-    random_gen(total_items*100, s, rd);
-
-    // for(int i = 0; i < total_items; i++) {
-    //     r.push_back(i);
-    // }
-    // for(int j = total_items; j < total_items*300; j++) {
-    //     s.push_back(j);
-    // }
-
-    // cf.HashAll(r, s);
-    // cout << cf.Info() << "\n";
-
-    for(auto c : r) { // still need to implement indices for lookup
-        cf.Add(c);
-        assert(cf.Contain(c) == cuckoofilter::Ok);
-    }
-
+size_t lookup(cuckoofilter::CuckooFilter<size_t, 16> &cf, vector<uint64_t> &s) {
+    // lookup set S and count false positives
+    cout << "s lookup\n";
     size_t total_queries = 0;
     size_t false_queries = 0;
     for(size_t i = 0; i < s.size(); i++) {
@@ -50,17 +26,52 @@ int main(int argc, char **argv) {
         }
         total_queries++;
     }
-
     // Output the measured false positive rate
-    cout << "total fp's: " << false_queries << "\n";
+    cout << "total fp's: " << false_queries << " out of " << total_queries << "\n";
     cout << "false positive rate is " << 100.0 * false_queries / total_queries << "%\n";
+    return false_queries;
+}
 
-    // cout << "Values returned by Pair: " << endl; 
-    // cout << p.first << " " << p.second << endl; 
-    // r.insert(p); // TODO: change value to list/vector to hold multiple tags/fp's to each bucket
+int main(int argc, char **argv) {
+    int seed = 1;
+    mt19937 rd(seed);
 
-    // print_map(r);
-    
-    // cout << cf.Info() << endl;
+    size_t rehash_limit = 5;
+
+    size_t total_items = 50;
+    cout << "inserting " << total_items << " items\n";
+    size_t n = total_items/0.95;
+    // int n = total_items/1.2;
+    cout << "creating filter size " << n << "\n";
+    cuckoofilter::CuckooFilter<size_t, 16> cf(n);
+    vector<uint64_t> r;
+    vector<uint64_t> s;
+
+    // 64-bit random numbers to insert and lookup -> lookup_size = insert_size * 100
+    random_gen(total_items, r, rd);
+    random_gen(total_items*100, s, rd); 
+
+    // add set R to filter
+    for(auto c : r) {
+        assert(cf.Add(c) == cuckoofilter::Ok);
+        assert(cf.Contain(c) == cuckoofilter::Ok);
+        // if(cf.Contain(c) != cuckoofilter::Ok) {
+        //     cout << "ERROR\n";
+        //     return 1;
+        // }   
+    }
+
+    // cout << cf.Info() << "\n";
+    size_t rehash_lup = 0;
+    while(lookup(cf, s) > 0 && rehash_lup < rehash_limit) {
+        cf.RehashCheck(s);
+        rehash_lup++;
+        if(rehash_lup >= rehash_limit)
+            cout << "rehashed too many times...\n";
+    }
+    cout << "full rehash lookup count: " << rehash_lup << "\n";
+    // lookup(cf, s);
+    // for(auto c : r)
+    //     assert(cf.Contain(c) == cuckoofilter::Ok);
     return 0;
 }

@@ -62,6 +62,12 @@ class SingleTable {
     return ss.str();
   }
 
+  inline void ReadTagsInBuckets(size_t i, uint32_t tags[4]) const {
+    for (size_t j = 0; j < kTagsPerBucket; j++) {
+        tags[j] = ReadTag(i, j);
+    }
+  }
+
   // read tag from pos(i,j)
   inline uint32_t ReadTag(const size_t i, const size_t j) const {
     const char *p = buckets_[i].bits_;
@@ -121,7 +127,7 @@ class SingleTable {
     }
   }
 
-  inline bool FindTagInBuckets(const size_t i1, const size_t i2,
+  inline int32_t FindTagInBuckets(const size_t i1, const size_t i2,
                                const uint32_t tag) const {
     const char *p1 = buckets_[i1].bits_;
     const char *p2 = buckets_[i2].bits_;
@@ -129,50 +135,78 @@ class SingleTable {
     uint64_t v1 = *((uint64_t *)p1);
     uint64_t v2 = *((uint64_t *)p2);
 
+    int32_t notFound = -1;
+
     // caution: unaligned access & assuming little endian
     if (bits_per_tag == 4 && kTagsPerBucket == 4) {
-      return hasvalue4(v1, tag) || hasvalue4(v2, tag);
+      if(hasvalue4(v1, tag)) return i1;
+      else if(hasvalue4(v2, tag)) return i2;
+      else return notFound;
+      // return hasvalue4(v1, tag) || hasvalue4(v2, tag);
     } else if (bits_per_tag == 8 && kTagsPerBucket == 4) {
-      return hasvalue8(v1, tag) || hasvalue8(v2, tag);
+      if(hasvalue8(v1, tag)) return i1;
+      else if(hasvalue8(v2, tag)) return i2;
+      else return notFound;
+      // return hasvalue8(v1, tag) || hasvalue8(v2, tag);
     } else if (bits_per_tag == 12 && kTagsPerBucket == 4) {
-      return hasvalue12(v1, tag) || hasvalue12(v2, tag);
+      if(hasvalue12(v1, tag)) return i1;
+      else if(hasvalue12(v2, tag)) return i2;
+      else return notFound;
+      // return hasvalue12(v1, tag) || hasvalue12(v2, tag);
     } else if (bits_per_tag == 16 && kTagsPerBucket == 4) {
-      return hasvalue16(v1, tag) || hasvalue16(v2, tag);
+      if(hasvalue16(v1, tag)) return i1;
+      else if(hasvalue16(v2, tag)) return i2;
+      else return notFound;
+      // return hasvalue16(v1, tag) || hasvalue16(v2, tag);
     } else {
       for (size_t j = 0; j < kTagsPerBucket; j++) {
-        if ((ReadTag(i1, j) == tag) || (ReadTag(i2, j) == tag)) {
-          return true;
+        if (ReadTag(i1, j) == tag) {
+          return i1;
         }
+        else if(ReadTag(i2, j) == tag) {
+          return i2;
+        }
+        // if ((ReadTag(i1, j) == tag) || (ReadTag(i2, j) == tag)) {
+        //   return true;
+        // }
       }
-      return false;
+      return notFound;
     }
   }
 
-  inline bool FindTagInBucket(const size_t i, const uint32_t tag) const {
+  inline int32_t FindTagInBucket(const size_t i, const uint32_t tag) const {
+    int32_t notFound = -1;
     // caution: unaligned access & assuming little endian
     if (bits_per_tag == 4 && kTagsPerBucket == 4) {
       const char *p = buckets_[i].bits_;
       uint64_t v = *(uint64_t *)p;  // uint16_t may suffice
-      return hasvalue4(v, tag);
+      if(hasvalue4(v, tag)) return i;
+      else return notFound;
     } else if (bits_per_tag == 8 && kTagsPerBucket == 4) {
       const char *p = buckets_[i].bits_;
       uint64_t v = *(uint64_t *)p;  // uint32_t may suffice
-      return hasvalue8(v, tag);
+      if(hasvalue8(v, tag)) return i;
+      else return notFound;
+      // return hasvalue8(v, tag);
     } else if (bits_per_tag == 12 && kTagsPerBucket == 4) {
       const char *p = buckets_[i].bits_;
       uint64_t v = *(uint64_t *)p;
-      return hasvalue12(v, tag);
+      if(hasvalue12(v, tag)) return i;
+      else return notFound;
+      // return hasvalue12(v, tag);
     } else if (bits_per_tag == 16 && kTagsPerBucket == 4) {
       const char *p = buckets_[i].bits_;
       uint64_t v = *(uint64_t *)p;
-      return hasvalue16(v, tag);
+      if(hasvalue16(v, tag)) return i;
+      else return notFound;
+      // return hasvalue16(v, tag);
     } else {
       for (size_t j = 0; j < kTagsPerBucket; j++) {
         if (ReadTag(i, j) == tag) {
-          return true;
+          return i;
         }
       }
-      return false;
+      return notFound;
     }
   }
 
@@ -187,8 +221,15 @@ class SingleTable {
     return false;
   }
 
+  inline void ClearTagsFromBucket(const size_t i) {
+    for (size_t j = 0; j < kTagsPerBucket; j++)
+      WriteTag(i, j, 0);
+  }
+
+  // static int reinsert = 0;
+
   inline bool InsertTagToBucket(const size_t i, const uint32_t tag,
-                                const bool kickout, uint32_t &oldtag) {
+                                uint32_t &oldtag, const bool kickout = false) {
     for (size_t j = 0; j < kTagsPerBucket; j++) {
       if (ReadTag(i, j) == 0) {
         WriteTag(i, j, tag);
@@ -211,6 +252,21 @@ class SingleTable {
       }
     }
     return num;
+  }
+
+  inline void PrintBucket(const size_t i) const {
+    std::cout << "bucket " << i << ": ";
+    for (size_t j = 0; j < kTagsPerBucket; j++) {
+      uint32_t tag = ReadTag(i, j);
+      if(tag)
+        std::cout << tag << " ";
+    }
+    std::cout << "\n";
+  }
+
+  inline void PrintTable() const {
+    for(size_t i = 0; i < num_buckets_; i++)
+      PrintBucket(i);
   }
 };
 }  // namespace cuckoofilter
