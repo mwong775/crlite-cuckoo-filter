@@ -3,6 +3,9 @@ Cuckoo hashing techniques for storing and tracking all TLS certificate revocatio
 
 ## Overview
 
+* Cuckoo Hashtable
+* Cuckoo Filter
+
 ## API
 
 ## Repository Structure
