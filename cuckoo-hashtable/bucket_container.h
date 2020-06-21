@@ -10,47 +10,46 @@
 #include <type_traits>
 #include <utility>
 
-#include "cuckoohash_util.hh"
+#include "cuckoo_hashutil.h"
 
-namespace libcuckoo {
+namespace cuckoohash {
 
 /**
- * bucket_container manages storage of key-value pairs for the table.
+ * bucket_container manages storage of keys for the table.
  * It stores the items inline in uninitialized memory, and keeps track of which
  * slots have live data and which do not. It also stores a partial hash for
  * each live key. It is sized by powers of two.
  *
  * @tparam Key type of keys in the table
- * @tparam T type of values in the table
- * @tparam Allocator type of key-value pair allocator
+ * @tparam Allocator type of key pair allocator
  * @tparam Partial type of partial keys
  * @tparam SLOT_PER_BUCKET number of slots for each bucket in the table
  */
-template <class Key, class T, class Allocator, class Partial,
+template <class Key, class Allocator, class Partial,
           std::size_t SLOT_PER_BUCKET>
 class bucket_container {
 public:
   using key_type = Key;
-  using mapped_type = T;
-  using value_type = std::pair<const Key, T>;
+//   using mapped_type = T;
+//   using key_type = std::pair<const Key, T>;
 
 private:
   using traits_ = typename std::allocator_traits<
-      Allocator>::template rebind_traits<value_type>;
+      Allocator>::template rebind_traits<key_type>;
 
 public:
   using allocator_type = typename traits_::allocator_type;
   using partial_t = Partial;
   using size_type = typename traits_::size_type;
-  using reference = value_type &;
-  using const_reference = const value_type &;
+//   using reference = key_type &;
+//   using const_reference = const key_type &;
   using pointer = typename traits_::pointer;
   using const_pointer = typename traits_::const_pointer;
 
   /*
-   * The bucket type holds SLOT_PER_BUCKET key-value pairs, along with their
+   * The bucket type holds SLOT_PER_BUCKET keys, along with their
    * partial keys and occupancy info. It uses aligned_storage arrays to store
-   * the keys and values to allow constructing and destroying key-value pairs
+   * the keys to allow constructing and destroying keys
    * in place. The lifetime of bucket data should be managed by the container.
    * It is the user's responsibility to confirm whether the data they are
    * accessing is live or not.
@@ -59,25 +58,14 @@ public:
   public:
     bucket() noexcept : occupied_() {}
 
-    const value_type &kvpair(size_type ind) const {
-      return *static_cast<const value_type *>(
-          static_cast<const void *>(&values_[ind]));
-    }
-    value_type &kvpair(size_type ind) {
-      return *static_cast<value_type *>(static_cast<void *>(&values_[ind]));
-    }
-
+    // return
     const key_type &key(size_type ind) const {
-      return storage_kvpair(ind).first;
-    }
-    key_type &&movable_key(size_type ind) {
-      return std::move(storage_kvpair(ind).first);
+      return storage_key(ind);
     }
 
-    const mapped_type &mapped(size_type ind) const {
-      return storage_kvpair(ind).second;
+    key_type &&movable_key(size_type ind) {
+      return std::move(storage_key(ind));
     }
-    mapped_type &mapped(size_type ind) { return storage_kvpair(ind).second; }
 
     partial_t partial(size_type ind) const { return partials_[ind]; }
     partial_t &partial(size_type ind) { return partials_[ind]; }
@@ -88,22 +76,23 @@ public:
   private:
     friend class bucket_container;
 
-    using storage_value_type = std::pair<Key, T>;
+    using storage_key_type = Key;
 
-    const storage_value_type &storage_kvpair(size_type ind) const {
-      return *static_cast<const storage_value_type *>(
-          static_cast<const void *>(&values_[ind]));
+    const storage_key_type &storage_key(size_type ind) const {
+      return *static_cast<const storage_key_type *>(
+          static_cast<const void *>(&keys_[ind]));
     }
-    storage_value_type &storage_kvpair(size_type ind) {
-      return *static_cast<storage_value_type *>(
-          static_cast<void *>(&values_[ind]));
+    storage_key_type &storage_key(size_type ind) {
+      return *static_cast<storage_key_type *>(
+          static_cast<void *>(&keys_[ind]));
     }
 
-    std::array<typename std::aligned_storage<sizeof(storage_value_type),
-                                             alignof(storage_value_type)>::type,
-               SLOT_PER_BUCKET>
-        values_;
+    // arrays for keys, partials, and occupancies
+    std::array<typename std::aligned_storage<sizeof(storage_key_type),
+        alignof(storage_key_type)>::type, SLOT_PER_BUCKET> keys_;
+
     std::array<partial_t, SLOT_PER_BUCKET> partials_;
+
     std::array<bool, SLOT_PER_BUCKET> occupied_;
   };
 
@@ -113,16 +102,17 @@ public:
     // The bucket default constructor is nothrow, so we don't have to
     // worry about dealing with exceptions when constructing all the
     // elements.
-    static_assert(std::is_nothrow_constructible<bucket>::value,
+    static_assert(std::is_nothrow_constructible<bucket>::key,
                   "bucket_container requires bucket to be nothrow "
                   "constructible");
     for (size_type i = 0; i < size(); ++i) {
       traits_::construct(allocator_, &buckets_[i]);
     }
-  }
+  } // end bucket class
 
   ~bucket_container() noexcept { destroy_buckets(); }
 
+// 3 different constructors...
   bucket_container(const bucket_container &bc)
       : allocator_(
             traits_::select_on_container_copy_construction(bc.allocator_)),
@@ -198,12 +188,12 @@ public:
 
   // Constructs live data in a bucket
   template <typename K, typename... Args>
-  void setKV(size_type ind, size_type slot, partial_t p, K &&k,
+  void setKey(size_type ind, size_type slot, partial_t p, K &&k,
              Args &&... args) {
     bucket &b = buckets_[ind];
     assert(!b.occupied(slot));
     b.partial(slot) = p;
-    traits_::construct(allocator_, std::addressof(b.storage_kvpair(slot)),
+    traits_::construct(allocator_, std::addressof(b.storage_key(slot)),
                        std::piecewise_construct,
                        std::forward_as_tuple(std::forward<K>(k)),
                        std::forward_as_tuple(std::forward<Args>(args)...));
@@ -212,26 +202,25 @@ public:
   }
 
   // Destroys live data in a bucket
-  void eraseKV(size_type ind, size_type slot) {
+  void eraseKey(size_type ind, size_type slot) {
     bucket &b = buckets_[ind];
     assert(b.occupied(slot));
     b.occupied(slot) = false;
-    traits_::destroy(allocator_, std::addressof(b.storage_kvpair(slot)));
+    traits_::destroy(allocator_, std::addressof(b.storage_key(slot)));
   }
 
   // Destroys all the live data in the buckets. Does not deallocate the bucket
   // memory.
   void clear() noexcept {
     static_assert(
-        std::is_nothrow_destructible<key_type>::value &&
-            std::is_nothrow_destructible<mapped_type>::value,
-        "bucket_container requires key and value to be nothrow "
+        std::is_nothrow_destructible<key_type>::key,
+        "bucket_container requires key to be nothrow "
         "destructible");
     for (size_type i = 0; i < size(); ++i) {
       bucket &b = buckets_[i];
       for (size_type j = 0; j < SLOT_PER_BUCKET; ++j) {
         if (b.occupied(j)) {
-          eraseKV(i, j);
+          eraseKey(i, j);
         }
       }
     }
@@ -242,6 +231,55 @@ public:
   // swap, move or copy assign to this container.
   void clear_and_deallocate() noexcept {
     destroy_buckets();
+  }
+
+  void print_keys() noexcept {
+      static_assert(
+      std::is_nothrow_destructible<key_type>::key,
+      "bucket_container requires key to be nothrow "
+      "destructible");
+    printf("printing buckets...\n");
+    for (size_type i = 0; i < size(); ++i) {
+      bucket &b = buckets_[i];
+      for (size_type j = 0; j < SLOT_PER_BUCKET; ++j) {
+        if (b.occupied(j)) {
+          printf(b.storage_key(j) + " ");
+        }
+      }
+      printf("\n");
+    }
+  }
+
+  void print_partials() noexcept {
+      static_assert(
+      std::is_nothrow_destructible<key_type>::key,
+      "bucket_container requires key to be nothrow "
+      "destructible");
+    printf("printing buckets...\n");
+    for (size_type i = 0; i < size(); ++i) {
+      bucket &b = buckets_[i];
+      for (size_type j = 0; j < SLOT_PER_BUCKET; ++j) {
+        if (b.occupied(j)) {
+          printf(b.partial(j) + " ");
+        }
+      }
+      printf("\n");
+    }
+  }
+
+  void print_occupancies() noexcept {
+      static_assert(
+      std::is_nothrow_destructible<key_type>::key,
+      "bucket_container requires key to be nothrow "
+      "destructible");
+    printf("printing buckets...\n");
+    for (size_type i = 0; i < size(); ++i) {
+      bucket &b = buckets_[i];
+      for (size_type j = 0; j < SLOT_PER_BUCKET; ++j) {
+        printf(b.occupied(j) + " ");
+      }
+      printf("\n");
+    }
   }
 
 private:
@@ -290,7 +328,7 @@ private:
     // The bucket default constructor is nothrow, so we don't have to
     // worry about dealing with exceptions when constructing all the
     // elements.
-    static_assert(std::is_nothrow_destructible<bucket>::value,
+    static_assert(std::is_nothrow_destructible<bucket>::key,
                   "bucket_container requires bucket to be nothrow "
                   "destructible");
     clear();
@@ -304,16 +342,15 @@ private:
   // `true` here refers to whether or not we should move
   void move_or_copy(size_type dst_ind, size_type dst_slot, bucket &src,
                     size_type src_slot, std::true_type) {
-    setKV(dst_ind, dst_slot, src.partial(src_slot), src.movable_key(src_slot),
-          std::move(src.mapped(src_slot)));
+    setKV(dst_ind, dst_slot, src.partial(src_slot), src.movable_key(src_slot));
   }
 
   void move_or_copy(size_type dst_ind, size_type dst_slot, bucket &src,
                     size_type src_slot, std::false_type) {
-    setKV(dst_ind, dst_slot, src.partial(src_slot), src.key(src_slot),
-          src.mapped(src_slot));
+    setKV(dst_ind, dst_slot, src.partial(src_slot), src.key(src_slot));
   }
 
+// probably use when exceed max kicks
   template <bool B>
   bucket_pointer transfer(
       size_type dst_hp,
@@ -336,8 +373,8 @@ private:
     return dst_pointer;
   }
 
-  // This allocator matches the value_type, but is not used to construct
-  // storage_value_type pairs, or allocate buckets
+  // This allocator matches the key_type, but is not used to construct
+  // storage_key_type pairs, or allocate buckets
   allocator_type allocator_;
   // This allocator is used for actually allocating buckets. It is simply
   // copy-constructed from `allocator_`, and will always be copied whenever
@@ -350,15 +387,15 @@ private:
   // BucketContainer), which must be obtained before accessing a bucket.
   bucket_pointer buckets_;
 
-  // If the key and value are Trivial, the bucket be serilizable. Since we
+  // If the key and key are Trivial, the bucket be serilizable. Since we
   // already disallow user-specialized instances of std::pair, we know that the
   // default implementation of std::pair uses a default copy constructor, so
   // this should be okay. We could in theory just check if the type is
   // TriviallyCopyable but this check is not available on some compilers we
   // want to support.
   template <typename ThisKey, typename ThisT>
-  friend typename std::enable_if<std::is_trivial<ThisKey>::value &&
-                                     std::is_trivial<ThisT>::value,
+  friend typename std::enable_if<std::is_trivial<ThisKey>::key &&
+                                     std::is_trivial<ThisT>::key,
                                  std::ostream &>::type
   operator<<(std::ostream &os,
              const bucket_container<ThisKey, ThisT, Allocator,
@@ -371,8 +408,8 @@ private:
   }
 
   template <typename ThisKey, typename ThisT>
-  friend typename std::enable_if<std::is_trivial<ThisKey>::value &&
-                                     std::is_trivial<ThisT>::value,
+  friend typename std::enable_if<std::is_trivial<ThisKey>::key &&
+                                     std::is_trivial<ThisT>::key,
                                  std::istream &>::type
   operator>>(std::istream &is,
              bucket_container<ThisKey, ThisT, Allocator,
@@ -387,6 +424,6 @@ private:
   }
 };
 
-}  // namespace libcuckoo
+}  // namespace cuckoohash
 
 #endif // BUCKET_CONTAINER_H

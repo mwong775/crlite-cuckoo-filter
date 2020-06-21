@@ -1,7 +1,7 @@
 #include <iostream>
 #include <string>
 
-#include <hashtable.h>
+#include <cuckoo_hashtable.h>
 
 int main() {
   cuckoohash::hashtable<int> Table;
