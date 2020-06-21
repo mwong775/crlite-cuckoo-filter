@@ -2,7 +2,7 @@
 #ifndef _CUCKOOHASH_UTIL_H_
 #define _CUCKOOHASH_UTIL_H_
 
-#include "cuckoo-config.h"
+#include "cuckoo_config.h"
 #include <exception>
 #include <utility>
 #include <vector>
