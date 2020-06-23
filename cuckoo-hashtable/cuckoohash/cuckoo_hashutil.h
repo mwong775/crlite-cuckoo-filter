@@ -8,23 +8,25 @@
 #include <utility>
 #include <vector>
 
-namespace cuckoohash {
+namespace cuckoohash
+{
 #if CUCKOO_DEBUG
 //! When \ref LIBCUCKOO_DEBUG is 0, LIBCUCKOO_DBG will printing out status
 //! messages in various situations
-#define LIBCUCKOO_DBG(fmt, ...)                                                \
-  fprintf(stderr,                                                              \
-          "\x1b[32m"                                                           \
-          "[libcuckoo:%s:%d:%lu] " fmt ""                                      \
-          "\x1b[0m",                                                           \
-          __FILE__, __LINE__,                                                  \
-          std::hash<std::thread::id>()(std::this_thread::get_id()),            \
-          __VA_ARGS__)
+#define LIBCUCKOO_DBG(fmt, ...)                                       \
+    fprintf(stderr,                                                   \
+            "\x1b[32m"                                                \
+            "[libcuckoo:%s:%d:%lu] " fmt ""                           \
+            "\x1b[0m",                                                \
+            __FILE__, __LINE__,                                       \
+            std::hash<std::thread::id>()(std::this_thread::get_id()), \
+            __VA_ARGS__)
 #else
 //! When \ref CUCKOOHASH_DEBUG is 0, CUCKOOHASH_DBG does nothing
-#define CUCKOOHASH_DBG(fmt, ...)                                               \
-  do {                                                                         \
-  } while (0)
+#define CUCKOOHASH_DBG(fmt, ...) \
+    do                           \
+    {                            \
+    } while (0)
 #endif
 
 /**
@@ -53,79 +55,84 @@ namespace cuckoohash {
  * is not really "dead".
  */
 #ifdef _MSC_VER
-#define CUCKOOHASH_SQUELCH_DEADCODE_WARNING_BEGIN                              \
-  do {                                                                         \
-    __pragma(warning(push));                                                   \
-    __pragma(warning(disable : 4702))                                          \
-  } while (0)
+#define CUCKOOHASH_SQUELCH_DEADCODE_WARNING_BEGIN \
+    do                                            \
+    {                                             \
+        __pragma(warning(push));                  \
+        __pragma(warning(disable : 4702))         \
+    } while (0)
 #define CUCKOOHASH_SQUELCH_DEADCODE_WARNING_END __pragma(warning(pop))
 #else
 #define CUCKOOHASH_SQUELCH_DEADCODE_WARNING_BEGIN
 #define CUCKOOHASH_SQUELCH_DEADCODE_WARNING_END
 #endif
 
-/**
+    /**
  * Thrown when an automatic expansion is triggered, but the load factor of the
  * table is below a minimum threshold, which can be set by the \ref
  * cuckoohash_map::minimum_load_factor method. This can happen if the hash
  * function does not properly distribute keys, or for certain adversarial
  * workloads.
  */
-class load_factor_too_low : public std::exception {
-public:
-  /**
+    class load_factor_too_low : public std::exception
+    {
+    public:
+        /**
    * Constructor
    *
    * @param lf the load factor of the table when the exception was thrown
    */
-  load_factor_too_low(const double lf) noexcept : load_factor_(lf) {}
+        load_factor_too_low(const double lf) noexcept : load_factor_(lf) {}
 
-  /**
+        /**
    * @return a descriptive error message
    */
-  virtual const char *what() const noexcept override {
-    return "Automatic expansion triggered when load factor was below "
-           "minimum threshold";
-  }
+        virtual const char *what() const noexcept override
+        {
+            return "Automatic expansion triggered when load factor was below "
+                   "minimum threshold";
+        }
 
-  /**
+        /**
    * @return the load factor of the table when the exception was thrown
    */
-  double load_factor() const noexcept { return load_factor_; }
+        double load_factor() const noexcept { return load_factor_; }
 
-private:
-  const double load_factor_;
-};
+    private:
+        const double load_factor_;
+    };
 
-/**
+    /**
  * Thrown when an expansion is triggered, but the hashpower specified is greater
  * than the maximum, which can be set with the \ref
  * cuckoohash_map::maximum_hashpower method.
  */
-class maximum_hashpower_exceeded : public std::exception {
-public:
-  /**
+    class maximum_hashpower_exceeded : public std::exception
+    {
+    public:
+        /**
    * Constructor
    *
    * @param hp the hash power we were trying to expand to
    */
-  maximum_hashpower_exceeded(const size_t hp) noexcept : hashpower_(hp) {}
+        maximum_hashpower_exceeded(const size_t hp) noexcept : hashpower_(hp) {}
 
-  /**
+        /**
    * @return a descriptive error message
    */
-  virtual const char *what() const noexcept override {
-    return "Expansion beyond maximum hashpower";
-  }
+        virtual const char *what() const noexcept override
+        {
+            return "Expansion beyond maximum hashpower";
+        }
 
-  /**
+        /**
    * @return the hashpower we were trying to expand to
    */
-  size_t hashpower() const noexcept { return hashpower_; }
+        size_t hashpower() const noexcept { return hashpower_; }
 
-private:
-  const size_t hashpower_;
-};
+    private:
+        const size_t hashpower_;
+    };
 
 } // namespace cuckoohash
 
