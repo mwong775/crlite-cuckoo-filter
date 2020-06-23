@@ -777,7 +777,8 @@ namespace cuckoohash {
         // acquire the lock must also migrate the corresponding buckets if
         // !is_migrated.
         LIBCUCKOO_SQUELCH_PADDING_WARNING
-        class LIBCUCKOO_ALIGNAS(64) spinlock {
+        class LIBCUCKOO_AL
+        IGNAS(64) spinlock {
         public:
             spinlock() : elem_counter_(0), is_migrated_(true) { lock_.clear(); }
 
@@ -888,7 +889,7 @@ namespace cuckoohash {
         inline void check_hashpower(size_type hp, spinlock &lock) const {
             if (hashpower() != hp) {
             lock.unlock();
-            LIBCUCKOO_DBG("%s", "hashpower changed\n");
+            CUCKOOHASH_DBG("%s", "hashpower changed\n");
             throw hashpower_changed();
             }
         }
@@ -1241,7 +1242,7 @@ namespace cuckoohash {
             return table_position{insert_bucket, insert_slot, ok};
             }
             assert(st == failure);
-            LIBCUCKOO_DBG("hash table is full (hashpower = %zu, hash_items = %zu,"
+            CUCKOOHASH_DBG("hash table is full (hashpower = %zu, hash_items = %zu,"
                         "load factor = %.2f), need to increase hashpower\n",
                         hashpower(), size(), load_factor());
             return table_position{0, 0, failure_table_full};
@@ -1633,7 +1634,7 @@ namespace cuckoohash {
         template <typename TABLE_MODE, typename AUTO_RESIZE>
         cuckoo_status cuckoo_fast_double(size_type current_hp) {
             if (!is_data_nothrow_move_constructible()) {
-            LIBCUCKOO_DBG("%s", "cannot run cuckoo_fast_double because key-value"
+            CUCKOOHASH_DBG("%s", "cannot run cuckoo_fast_double because key-value"
                                 " pair is not nothrow move constructible");
             return cuckoo_expand_simple<TABLE_MODE, AUTO_RESIZE>(current_hp + 1);
             }
@@ -1775,7 +1776,7 @@ namespace cuckoohash {
             if (hashpower() != orig_hp) {
             // Most likely another expansion ran before this one could grab the
             // locks
-            LIBCUCKOO_DBG("%s", "another expansion is on-going\n");
+            CUCKOOHASH_DBG("%s", "another expansion is on-going\n");
             return failure_under_expansion;
             }
             return ok;

@@ -11,7 +11,7 @@
 #include <utility>
 #include <vector>
 
-#include <cuckoo-hashtable/cuckoo_hashtable.h>
+#include "cuckoo_hashtable.h";
 
 typedef uint32_t KeyType;
 typedef cuckoohash::hashtable<KeyType> Table;
