@@ -1,4 +1,4 @@
-#include "city.h"
+#include "city.cc"
 
 /*! CityHasher is a std::hash-style wrapper around CityHash. We
  *  encourage using CityHasher instead of the default std::hash if

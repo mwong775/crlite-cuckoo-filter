@@ -5,6 +5,8 @@
 #include "cuckoohashtable.hh"
 #include "city_hasher.hh"
 
+using namespace std;
+
 int main() {
   cuckoohashtable::cuckoo_hashtable<int, CityHasher<int>>Table;
 
@@ -13,12 +15,12 @@ int main() {
   }
 
   for (int i = 0; i < 101; i++) {
-    std::string out;
+    string out;
 
     if (Table.find(i)) {
-      std::cout << i << "  " << out << std::endl;
+      // cout << i << "  " << out << endl;
     } else {
-      std::cout << i << "  NOT FOUND" << std::endl;
+      cout << i << "  NOT FOUND" << endl;
     }
   }
 }

@@ -2,6 +2,7 @@
 #define BUCKET_CONTAINER_H
 
 #include <array>
+#include <atomic>
 #include <cassert>
 #include <cstddef>
 #include <iostream>
@@ -23,14 +24,18 @@ namespace cuckoohashtable
     class bucket_container
     {
     public:
-        using key_type = const Key;
-
-        using allocator_type = typename traits_::allocator_type;
-        using size_type = typename traits_::size_type; // traits????
+        using key_type = Key;
 
     private:
-        using traits_ = typename std::allocator_traits<
-            Allocator>::template rebind_traits<key_type>;
+        using traits_ = typename std::allocator_traits<Allocator>::template rebind_traits<key_type>;
+
+    public:
+        using allocator_type = typename traits_::allocator_type;
+        using size_type = typename traits_::size_type;
+        using reference = key_type &;
+        using const_reference = const key_type &;
+        using pointer = typename traits_::pointer;
+        using const_pointer = typename traits_::const_pointer;
 
         /**
              * bucket type holds SLOT_PER_BUCKET keys, along with occupancy info
@@ -78,15 +83,16 @@ namespace cuckoohashtable
             std::array<bool, SLOT_PER_BUCKET> occupied_;
         };
 
-        bucket_container(size_type hp, const allocator_type &allocator) : allocator_(allocator), bucket_allocator_(allocator),
-                                                                          buckets_(bucket_allocator_.allocate(size()))
+        bucket_container(size_type hp, const allocator_type &allocator) :
+                        allocator_(allocator), bucket_allocator_(allocator),
+                        hashpower_(hp), buckets_(bucket_allocator_.allocate(size()))
         {
             // The bucket default constructor is nothrow, so we don't have to
             // worry about dealing with exceptions when constructing all the
             // elements.
-            static_assert(std::is_nothrow_constructible<bucket>::key,
-                          "bucket_container requires bucket to be nothrow "
-                          "constructible");
+            // static_assert(std::is_nothrow_constructible<bucket>::key, // 'key' is not a member of nothrow thing
+            //               "bucket_container requires bucket to be nothrow "
+            //               "constructible");
             for (size_type i = 0; i < size(); ++i)
             {
                 traits_::construct(allocator_, &buckets_[i]);
@@ -137,10 +143,9 @@ namespace cuckoohashtable
         // Destroys all the live data in the buckets. Does not deallocate the bucket memory.
         void clear() noexcept
         {
-            static_assert(
-                std::is_nothrow_destructible<key_type>::key,
-                "bucket_container requires key to be nothrow "
-                "destructible");
+            // static_assert(
+            //     std::is_nothrow_destructible<key_type>::key,
+            //     "bucket_container requires key to be nothrow destructible"); // throwing 'key' is not a member
             for (size_type i = 0; i < size(); ++i)
             {
                 bucket &b = buckets_[i];
@@ -148,7 +153,7 @@ namespace cuckoohashtable
                 {
                     if (b.occupied(j))
                     {
-                        eraseKV(i, j);
+                        eraseK(i, j);
                     }
                 }
             }
@@ -164,6 +169,27 @@ namespace cuckoohashtable
 
     private:
         using bucket_traits_ = typename traits_::template rebind_traits<bucket>;
+        using bucket_pointer = typename bucket_traits_::pointer;
+
+        void destroy_buckets() noexcept{
+            if (buckets_ == nullptr)
+            {
+                return;
+            }
+            // The bucket default constructor is nothrow, so we don't have to
+            // worry about dealing with exceptions when constructing all the
+            // elements.
+            static_assert(std::is_nothrow_destructible<bucket>::value,
+                          "bucket_container requires bucket to be nothrow "
+                          "destructible");
+            clear();
+            for (size_type i = 0; i < size(); ++i)
+            {
+                traits_::destroy(allocator_, &buckets_[i]);
+            }
+            bucket_allocator_.deallocate(buckets_, size());
+            buckets_ = nullptr;
+        }
 
         // This allocator matches the value_type, but is not used to construct
         // storage_value_type pairs, or allocate buckets
@@ -173,6 +199,12 @@ namespace cuckoohashtable
         // allocator_ is copied.
         typename traits_::template rebind_alloc<bucket> bucket_allocator_;
 
+        // This needs to be atomic, since it can be read and written by multiple
+        // threads not necessarily synchronized by a lock.
+        std::atomic<size_type> hashpower_;
+        // These buckets are protected by striped locks (external to the
+        // BucketContainer), which must be obtained before accessing a bucket.
+        bucket_pointer buckets_;
     };
 } // namespace cuckoohashtable
 
