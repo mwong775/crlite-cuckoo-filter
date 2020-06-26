@@ -120,15 +120,16 @@ namespace cuckoohashtable
 
         // Constructs live data in a bucket
         template <typename K> // , typename... Args
-        void setK(size_type ind, size_type slot, K &k) // , Args &&... args
+        void setK(size_type ind, size_type slot, K &&k) // , Args &&... args
         {
             bucket &b = buckets_[ind];
             assert(!b.occupied(slot));
             traits_::construct(allocator_, std::addressof(b.storage_key(slot)),
-                               std::piecewise_construct,
+                            //    std::piecewise_construct,
                                std::forward<K>(k)); // std::forward(std::forward<Args>(args)...)
             // This must occur last, to enforce a strong exception guarantee
             b.occupied(slot) = true;
+            std::cout << "finished adding " << k << " to bucket in slot " << slot << " & index " << ind << "\n";
         }
 
         // Destroys live data in a bucket

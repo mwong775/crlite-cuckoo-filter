@@ -34,6 +34,7 @@ namespace cuckoohashtable
 
     private:
         using buckets_t = bucket_container<Key, Allocator, SLOT_PER_BUCKET>;
+        size_t num_items_;
 
     public:
         using key_type = typename buckets_t::key_type;
@@ -58,7 +59,7 @@ namespace cuckoohashtable
      * @param alloc ? 
      */
         cuckoo_hashtable(size_type n = (1U << 16) * 4, const Hash &hf = Hash(),
-                         const KeyEqual &equal = KeyEqual(), const Allocator &alloc = Allocator()) : hash_fn_(hf), eq_fn_(equal),
+                         const KeyEqual &equal = KeyEqual(), const Allocator &alloc = Allocator()) : num_items_(0), hash_fn_(hf), eq_fn_(equal),
                                                                                                      buckets_(reserve_calc(n), alloc) {}
 
         /**
@@ -116,7 +117,7 @@ namespace cuckoohashtable
      */
         size_type size() const
         { // TODO: fix this
-            return 0;
+            return num_items_;
         }
 
         /** Returns the current capacity of the table, that is, @ref bucket_count()
@@ -137,29 +138,43 @@ namespace cuckoohashtable
             return static_cast<double>(size()) / static_cast<double>(capacity());
         }
 
+        // Table status & information to print
+        void info() const
+        {
+            std::cout << "CuckooHashtable Status:\n"
+                      << "\t\tKeys stored: " << size() << "\n"
+                      << "\t\tLoad factor: " << load_factor() << "\n"
+                      << "\t\tCapacity: " << capacity() << "\n";
+        }
+
         /**
    * Inserts the key-value pair into the table. Equivalent to calling @ref
    * upsert with a functor that does nothing.
    */
-        template <typename K> // , typename... Args
-        bool insert(K &&key)  // , Args &&... k
+        template <typename K>                           // , typename... Args
+        std::pair<size_type, size_type> insert(K &&key) // , Args &&... k
         {
+            // std::cout << "inserting " << key << "\n";
+
             // get hashed key
             size_type hv = hashed_key(key);
             std::cout << "hashed key: " << hv << "\n";
             // find position in table
             auto b = compute_buckets(hv);
             table_position pos = cuckoo_insert_loop(hv, b, key);
-            std::cout << "index: " << pos.index << " slot: " << pos.slot << " status: " << pos.status << "\n";
+            std::cout << "found spot @ index: " << pos.index << " slot: " << pos.slot << " status: " << pos.status << "\n";
             // add to bucket
             if (pos.status == ok)
             {
-                // add_to_bucket(pos.index, pos.slot, std::forward<K>(key)); // , std::forward<Args>(k)...
+                add_to_bucket(pos.index, pos.slot, std::forward<K>(key)); // , std::forward<Args>(k)...
+                num_items_++;
             }
-            // return status
+            else
+            {
+                assert(pos.status == failure_key_duplicated);
+            }
+            return std::make_pair(pos.index, pos.slot);
 
-            // std::cout << "inserting " << key << "\n";
-            return ok == true;
             // return std::make_pair(iterator(map_.get().buckets_, pos.index, pos.slot),
             //                       pos.status == ok);
             // return upsert(
@@ -176,11 +191,11 @@ namespace cuckoohashtable
    * @throw std::out_of_range if the key is not found
    */
         template <typename K>
-        key_type find(const K &key) const
+        bool find(const K &key) const
         {
             // std::cout << "finding " << key << "\n";
             // const hash_value hv = hashed_key(key);
-            return key;
+            return true;
             // const auto b = snapshot_and_lock_two<normal_mode>(hv);
             // const table_position pos = cuckoo_find(key, hv.partial, b.i1, b.i2);
             // if (pos.status == ok)
