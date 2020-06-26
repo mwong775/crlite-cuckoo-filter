@@ -83,9 +83,8 @@ namespace cuckoohashtable
             std::array<bool, SLOT_PER_BUCKET> occupied_;
         };
 
-        bucket_container(size_type hp, const allocator_type &allocator) :
-                        allocator_(allocator), bucket_allocator_(allocator),
-                        hashpower_(hp), buckets_(bucket_allocator_.allocate(size()))
+        bucket_container(size_type hp, const allocator_type &allocator) : allocator_(allocator), bucket_allocator_(allocator),
+                                                                          hashpower_(hp), buckets_(bucket_allocator_.allocate(size()))
         {
             // The bucket default constructor is nothrow, so we don't have to
             // worry about dealing with exceptions when constructing all the
@@ -118,18 +117,22 @@ namespace cuckoohashtable
         bucket &operator[](size_type i) { return buckets_[i]; }
         const bucket &operator[](size_type i) const { return buckets_[i]; }
 
+        void info() const
+        {
+            std::cout << "BucketContainer status:\n"
+                      << "\t\tslots per bucket: " << SLOT_PER_BUCKET << "\n";
+        }
+
         // Constructs live data in a bucket
-        template <typename K> // , typename... Args
+        template <typename K>                           // , typename... Args
         void setK(size_type ind, size_type slot, K &&k) // , Args &&... args
         {
             bucket &b = buckets_[ind];
             assert(!b.occupied(slot));
-            traits_::construct(allocator_, std::addressof(b.storage_key(slot)),
-                            //    std::piecewise_construct,
-                               std::forward<K>(k)); // std::forward(std::forward<Args>(args)...)
+            traits_::construct(allocator_, std::addressof(b.storage_key(slot)), std::forward<K>(k));
             // This must occur last, to enforce a strong exception guarantee
             b.occupied(slot) = true;
-            std::cout << "finished adding " << k << " to bucket in slot " << slot << " & index " << ind << "\n";
+            // std::cout << "finished adding " << k << " to bucket in slot " << slot << " & index " << ind << "\n";
         }
 
         // Destroys live data in a bucket
@@ -172,7 +175,8 @@ namespace cuckoohashtable
         using bucket_traits_ = typename traits_::template rebind_traits<bucket>;
         using bucket_pointer = typename bucket_traits_::pointer;
 
-        void destroy_buckets() noexcept{
+        void destroy_buckets() noexcept
+        {
             if (buckets_ == nullptr)
             {
                 return;

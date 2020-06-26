@@ -9,12 +9,14 @@ using namespace std;
 
 int main() {
   cuckoohashtable::cuckoo_hashtable<int, CityHasher<int>>Table;
+  int size = 10;
 
-  for (int i = 0; i < 100; i++) {
-    Table.insert(i);
+  for (int i = 0; i < size; i++) {
+    pair<size_t, size_t> location = Table.insert(i);
+    cout << "insert " << i << " at index " << location.first << ", slot " << location.second << "\n";
   }
 
-  for (int i = 0; i < 101; i++) {
+  for (int i = 0; i < size; i++) {
     string out;
 
     if (Table.find(i)) {
@@ -23,4 +25,6 @@ int main() {
       cout << i << "  NOT FOUND" << endl;
     }
   }
+
+  Table.info();
 }
