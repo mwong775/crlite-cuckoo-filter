@@ -121,6 +121,31 @@ namespace cuckoohashtable
         {
             std::cout << "BucketContainer status:\n"
                       << "\t\tslots per bucket: " << SLOT_PER_BUCKET << "\n";
+
+            print();
+        }
+
+        void print() const
+        {
+            for (size_type i = 0; i < size(); ++i)
+            {
+                bucket &b = buckets_[i];
+                std::cout << "[ ";
+                for (size_type j = 0; j < SLOT_PER_BUCKET; ++j)
+                {
+                    if (b.occupied(j))
+                    {
+                        std::cout << b.key(j);
+                    } else {
+                        std::cout << " ";
+                    }
+                    if (j < SLOT_PER_BUCKET - 1)
+                    {
+                        std::cout << ", ";
+                    }
+                }
+                std::cout << "]\n";
+            }
         }
 
         // Constructs live data in a bucket
