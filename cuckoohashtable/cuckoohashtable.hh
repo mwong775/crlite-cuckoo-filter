@@ -143,8 +143,10 @@ namespace cuckoohashtable
         {
             std::cout << "CuckooHashtable Status:\n"
                       << "\t\tKeys stored: " << size() << "\n"
-                      << "\t\tLoad factor: " << load_factor() << "\n"
-                      << "\t\tCapacity: " << capacity() << "\n";
+                      << "\t\tBucket count: " << bucket_count() << "\n"
+                      << "\t\tSlot per bucket: " << slot_per_bucket() << "\n"
+                      << "\t\tCapacity: " << capacity() << "\n"
+                      << "\t\tLoad factor: " << load_factor() << "\n";
             buckets_.info();
         }
 
@@ -376,8 +378,10 @@ namespace cuckoohashtable
                 {
                 case ok:
                 case failure_key_duplicated:
-                    return pos;
-                // case failure_table_full:
+                    return pos; // both cases return location
+                case failure_table_full:
+                    throw std::out_of_range("table full :(");
+                    break;
                 //     // Expand the table and try again, re-grabbing the locks
                 //     cuckoo_fast_double<TABLE_MODE, automatic_resize>(hp);
                 //     b = snapshot_and_lock_two<TABLE_MODE>(hv);
@@ -388,6 +392,8 @@ namespace cuckoohashtable
                 //     b = snapshot_and_lock_two<TABLE_MODE>(hv);
                 //     break;
                 default:
+                    std::cout << "error on index: " << pos.index << " slot: " << pos.slot << " status: " << pos.status << "\n";
+                    info();
                     assert(false);
                 }
             }
@@ -437,6 +443,19 @@ namespace cuckoohashtable
             {
                 return table_position{b.i2, static_cast<size_type>(res2), ok};
             }
+
+            // We are unlucky, so let's perform cuckoo hashing ~
+            size_type insert_bucket = 0;
+            size_type insert_slot = 0;
+            cuckoo_status st = run_cuckoo(b, insert_bucket, insert_slot);
+            if (st == ok)
+            {
+                assert(!buckets_[insert_bucket].occupied(insert_slot));
+                assert(insert_bucket == index_hash(hashpower(), hv) || insert_bucket == alt_index(hashpower(), hv, index_hash(hashpower(), hv)));
+            }
+            assert(st == failure);
+            std::cout << "hashtable is full (hashpower = " << hashpower() << ", hash_items = " << size() << ", load factor = " << load_factor() << "), need to increase hashpower\n";
+            return table_position{0, 0, failure_table_full};
         }
 
         // add_to_bucket will insert the given key-value pair into the slot. The key
@@ -462,10 +481,6 @@ namespace cuckoohashtable
             {
                 if (b.occupied(i))
                 {
-                    // if (!is_simple() && partial != b.partial(i))
-                    // {
-                    //     continue;
-                    // }
                     if (key_eq()(b.key(i), key))
                     {
                         slot = i;
@@ -477,41 +492,67 @@ namespace cuckoohashtable
                     slot = i;
                 }
             }
-            // std::cout << "slot: " << slot << "\n";
+            std::cout << "slot: " << slot << "\n";
             return true;
         }
 
-        // Miscellaneous functions
-
-        // reserve_calc takes in a parameter specifying a certain number of slots
-        // for a table and returns the smallest hashpower that will hold n elements.
-        static size_type reserve_calc(const size_type n)
+        // CuckooRecord holds one position in a cuckoo path. Since cuckoopath
+        // elements only define a sequence of alternate hashings for different hash
+        // values, we only need to keep track of the hash values being moved, rather
+        // than the keys themselves.
+        typedef struct
         {
-            const size_type buckets = (n + slot_per_bucket() - 1) / slot_per_bucket();
-            size_type blog2;
-            for (blog2 = 0; (size_type(1) << blog2) < buckets; ++blog2)
-                ;
-            assert(n <= buckets * slot_per_bucket() && buckets <= hashsize(blog2));
-            return blog2;
+            size_type bucket;
+            size_type slot;
+            size_type hv;
+        } CuckooRecord;
+
+        // The maximum number of items in a cuckoo BFS path. It determines the
+        // maximum number of slots we search when cuckooing.
+        static constexpr uint8_t MAX_BFS_PATH_LEN = 5;
+
+        // An array of CuckooRecords
+        using CuckooRecords = std::array<CuckooRecord, MAX_BFS_PATH_LEN>;
+
+        // run_cuckoo performs cuckoo hashing on the table in an attempt to free up
+        // a slot on either of the insert buckets. On success, the bucket and slot
+        // that was freed up is stored in insert_bucket and insert_slot. If run_cuckoo
+        // returns ok (success), then `b` will be active, otherwise it will not.
+        cuckoo_status run_cuckoo(TwoBuckets &b, size_type &insert_bucket,
+                                 size_type &insert_slot)
+        {
         }
+            // Miscellaneous functions
 
-        // Member variables
+            // reserve_calc takes in a parameter specifying a certain number of slots
+            // for a table and returns the smallest hashpower that will hold n elements.
+            static size_type reserve_calc(const size_type n)
+            {
+                const size_type buckets = (n + slot_per_bucket() - 1) / slot_per_bucket();
+                size_type blog2;
+                for (blog2 = 0; (size_type(1) << blog2) < buckets; ++blog2)
+                    ;
+                assert(n <= buckets * slot_per_bucket() && buckets <= hashsize(blog2));
+                return blog2;
+            }
 
-        // The hash function
-        hasher hash_fn_;
+            // Member variables
 
-        // The equality function
-        key_equal eq_fn_;
+            // The hash function
+            hasher hash_fn_;
 
-        // container of buckets. The size or memory location of the buckets cannot be
-        // changed unless all the locks are taken on the table. Thus, it is only safe
-        // to access the buckets_ container when you have at least one lock held.
-        //
-        // Marked mutable so that const methods can rehash into this container when
-        // necessary.
-        mutable buckets_t buckets_;
-    };
+            // The equality function
+            key_equal eq_fn_;
 
-}; // namespace cuckoohashtable
+            // container of buckets. The size or memory location of the buckets cannot be
+            // changed unless all the locks are taken on the table. Thus, it is only safe
+            // to access the buckets_ container when you have at least one lock held.
+            //
+            // Marked mutable so that const methods can rehash into this container when
+            // necessary.
+            mutable buckets_t buckets_;
+        };
+
+    }; // namespace cuckoohashtable
 
 #endif // CUCKOO_HASHTABLE_HH
