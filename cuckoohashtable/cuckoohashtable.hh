@@ -677,6 +677,51 @@ namespace cuckoohashtable
             }
         };
 
+        // b_queue is the queue used to store b_slots for BFS cuckoo hashing.
+        class b_queue {
+            public:
+            b_queue() noexcept : first_(0), last_(0) {}
+
+            void enqueue(b_slot x) {
+                assert(!full());
+                slots_[last_++] = x;
+            }
+
+            b_slot dequeue() {
+                assert(!empty());
+                assert(first_ < last_);
+                b_slot &x = slots_[first_++];
+                return x;
+            }
+
+            bool empty() const { return first_ == last_; }
+
+            bool full() const { return last_ == MAX_CUCKOO_COUNT; }
+
+        private:
+            // The size of the BFS queue. It holds just enough elements to fulfill a
+            // MAX_BFS_PATH_LEN search for two starting buckets, with no circular
+            // wrapping-around. For one bucket, this is the geometric sum
+            // sum_{k=0}^{MAX_BFS_PATH_LEN-1} slot_per_bucket()^k = (1 - slot_per_bucket()^MAX_BFS_PATH_LEN) / (1 - slot_per_bucket())
+            // 
+            // Note that if slot_per_bucket() == 1, then this simply equals MAX_BFS_PATH_LEN.
+            static_assert(slot_per_bucket() > 0, "SLOT_PER_BUCKET msut be greater than 0!");
+                static constexpr size_type MAX_CUCKOO_COUNT =
+        2 * ((slot_per_bucket() == 1)
+             ? MAX_BFS_PATH_LEN
+             : (const_pow(slot_per_bucket(), MAX_BFS_PATH_LEN) - 1) /
+               (slot_per_bucket() - 1));
+        
+        // An array of b_slots. Since we allocate just enough space to complete a full search,
+        // we should never exceed the end of the array.
+        b_slot slots_[MAX_CUCKOO_COUNT];
+        // The index of the head of the queue in the array
+        size_type first_;
+        // One past the index of the last_ item of the queue in the array.
+        size_type last_;
+
+        };
+
         b_slot slot_search(const size_type hp, const size_type i1, const size_type i2) {
             
         }
