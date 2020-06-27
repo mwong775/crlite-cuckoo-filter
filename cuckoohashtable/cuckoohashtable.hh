@@ -521,38 +521,198 @@ namespace cuckoohashtable
         cuckoo_status run_cuckoo(TwoBuckets &b, size_type &insert_bucket,
                                  size_type &insert_slot)
         {
-        }
-            // Miscellaneous functions
-
-            // reserve_calc takes in a parameter specifying a certain number of slots
-            // for a table and returns the smallest hashpower that will hold n elements.
-            static size_type reserve_calc(const size_type n)
+            // cuckoo_search and cuckoo_move
+            size_type hp = hashpower();
+            CuckooRecords cuckoo_path;
+            bool done = false;
+            while (!done)
             {
-                const size_type buckets = (n + slot_per_bucket() - 1) / slot_per_bucket();
-                size_type blog2;
-                for (blog2 = 0; (size_type(1) << blog2) < buckets; ++blog2)
-                    ;
-                assert(n <= buckets * slot_per_bucket() && buckets <= hashsize(blog2));
-                return blog2;
+                const int depth = cuckoopath_search(hp, cuckoo_path, b.i1, b.i2);
+                if (depth < 0)
+                {
+                    break;
+                }
+
+                if (cuckoopath_move(hp, cuckoo_path, depth, b))
+                {
+                    insert_bucket = cuckoo_path[0].bucket;
+                    insert_slot = cuckoo_path[0].slot;
+                    assert(insert_bucket == b.i1 || insert_bucket == b.i2);
+                    assert(!buckets_[insert_bucket].occupied(insert_slot));
+                    done = true;
+                    break;
+                }
+            }
+            return done ? ok : failure;
+        }
+
+        // cuckoopath_search finds a cuckoo path from one of the starting buckets to
+        // an empty slot in another bucket. It returns the depth of the discovered
+        // cuckoo path on success, and -1 on failure.
+        int cuckoopath_search(const size_type hp, CuckooRecords &cuckoo_path,
+                              const size_type i1, const size_type i2)
+        {
+            b_slot x = slot_search(hp, i1, i2);
+            if (x.depth == -1)
+            {
+                return -1;
+            }
+            // Fill in the cuckoo path slots from the end to the beginning.
+            for (int i = x.depth; i >= 0; i--)
+            {
+                cuckoo_path[i].slot = x.pathcode % slot_per_bucket();
+                x.pathcode /= slot_per_bucket();
+            }
+            // Fill in the cuckoo_path buckets and keys from the beginning to the
+            // end, using the final pathcode to figure out which bucket the path
+            // starts on.
+            CuckooRecord &first = cuckoo_path[0];
+            if(x.pathcode == 0) {
+                first.bucket = i1;
+            } else {
+                assert(x.pathcode == 1);
+                first.bucket = i2;
+            }
+            {
+                const bucket &b = buckets_[first.bucket];
+                if (!b.occupied(first.slot)) {
+                    return 0;
+                }
+                first.hv = hashed_key(b.key(first.slot));
+            }
+            for(int i = 1; i <= x.depth; ++i) {
+                CuckooRecord &curr = cuckoo_path[i];
+                const CuckooRecord &prev = cuckoo_path[i - 1];
+                assert(prev.bucket == index_hash(hp, prev.hv) || prev.bucket == alt_index(hp, prev.hv, index_hash(hp, prev.hv)));
+                // We get the bucket that this slot is on by computing the alternate index of the previous bucket
+                curr.bucket = alt_index(hp, prev.hv, prev.bucket);
+                const bucket &b = buckets_[curr.bucket];
+                if(!b.occupied(curr.slot)) {
+                    // We can terminate here!
+                    return i;
+                }
+                curr.hv = hashed_key(b.key(curr.slot));
+            }
+            return x.depth;
+        }
+
+        // cuckoopath_move moves keys along the given cuckoo path in order to make
+        // an empty slot in one of the buckets in cuckoo_insert.
+        bool cuckoopath_move(const size_type hp, CuckooRecords &cuckoo_path, size_type depth, TwoBuckets &b)
+        {
+            if (depth == 0)
+            {
+                // There is a chance that depth == 0, when try_add_to_bucket sees
+                // both buckets as full and cuckoopath_search finds one empty? Probably not w/o concurrency
+                const size_type bucket_i = cuckoo_path[0].bucket;
+                assert(bucket_i == b.i1 || bucket_i == b.i2);
+                if (!buckets_[bucket_i].occupied(cuckoo_path[0].slot))
+                {
+                    return true;
+                }
+                else
+                {
+                    return false;
+                }
             }
 
-            // Member variables
+            while (depth > 0)
+            {
+                CuckooRecord &from = cuckoo_path[depth - 1];
+                CuckooRecord &to = cuckoo_path[depth];
+                const size_type fs = from.slot;
+                const size_type ts = to.slot;
+                TwoBuckets twob;
 
-            // The hash function
-            hasher hash_fn_;
+                bucket &fb = buckets_[from.bucket];
+                bucket &tb = buckets_[to.bucket];
 
-            // The equality function
-            key_equal eq_fn_;
+                // checks valid cuckoo, and that the hash value is the same
+                if (tb.occupied(ts) || !fb.occupied(fs) || hashed_key(fb.key(fs)) != from.hv)
+                {
+                    return false;
+                }
 
-            // container of buckets. The size or memory location of the buckets cannot be
-            // changed unless all the locks are taken on the table. Thus, it is only safe
-            // to access the buckets_ container when you have at least one lock held.
-            //
-            // Marked mutable so that const methods can rehash into this container when
-            // necessary.
-            mutable buckets_t buckets_;
+                buckets_.setK(to.bucket, ts, std::move(fb.key(fs)));
+                buckets_.eraseK(from.bucket, fs);
+                depth--;
+            }
+            return true;
+        }
+
+        // A constexpr version of pow that we can use for various compile-time
+        // constants and checks.
+        static constexpr size_type const_pow(size_type a, size_type b)
+        {
+            return (b == 0) ? 1 : a * const_pow(a, b - 1);
+        }
+        // b_slot holds the information for a BFS path through the table.
+        struct b_slot
+        {
+            // The bucket of the last item in the path.
+            size_type bucket;
+            // a compressed representation of the slots for each of the buckets in
+            // the path. pathcode is sort of like a base-slot_per_bucket number, and
+            // we need to hold at most MAX_BFS_PATH_LEN slots. Thus we need the
+            // maximum pathcode to be at least slot_per_bucket()^(MAX_BFS_PATH_LEN).
+            uint16_t pathcode;
+            static_assert(const_pow(slot_per_bucket(), MAX_BFS_PATH_LEN) <
+                              std::numeric_limits<decltype(pathcode)>::max(),
+                          "pathcode may not be large enough to encode a cuckoo "
+                          "path");
+            // The 0-indexed position in the cuckoo path this slot occupies. It must
+            // be less than MAX_BFS_PATH_LEN, and also able to hold negative values.
+            int8_t depth;
+            static_assert(MAX_BFS_PATH_LEN - 1 <=
+                              std::numeric_limits<decltype(depth)>::max(),
+                          "The depth type must able to hold a value of"
+                          " MAX_BFS_PATH_LEN - 1");
+            static_assert(-1 >= std::numeric_limits<decltype(depth)>::min(),
+                          "The depth type must be able to hold a value of -1");
+            b_slot() {}
+            b_slot(const size_type b, const uint16_t p, const decltype(depth) d)
+                : bucket(b), pathcode(p), depth(d)
+            {
+                assert(d < MAX_BFS_PATH_LEN);
+            }
         };
 
-    }; // namespace cuckoohashtable
+        b_slot slot_search(const size_type hp, const size_type i1, const size_type i2) {
+            
+        }
+
+        // Miscellaneous functions
+
+        // reserve_calc takes in a parameter specifying a certain number of slots
+        // for a table and returns the smallest hashpower that will hold n elements.
+        static size_type
+        reserve_calc(const size_type n)
+        {
+            const size_type buckets = (n + slot_per_bucket() - 1) / slot_per_bucket();
+            size_type blog2;
+            for (blog2 = 0; (size_type(1) << blog2) < buckets; ++blog2)
+                ;
+            assert(n <= buckets * slot_per_bucket() && buckets <= hashsize(blog2));
+            return blog2;
+        }
+
+        // Member variables
+
+        // The hash function
+        hasher hash_fn_;
+
+        // The equality function
+        key_equal eq_fn_;
+
+        // container of buckets. The size or memory location of the buckets cannot be
+        // changed unless all the locks are taken on the table. Thus, it is only safe
+        // to access the buckets_ container when you have at least one lock held.
+        //
+        // Marked mutable so that const methods can rehash into this container when
+        // necessary.
+        mutable buckets_t buckets_;
+    };
+
+}; // namespace cuckoohashtable
 
 #endif // CUCKOO_HASHTABLE_HH
