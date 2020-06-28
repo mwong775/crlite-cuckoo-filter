@@ -174,15 +174,10 @@ namespace cuckoohashtable
             }
             else
             {
-                assert(pos.status == failure_key_duplicated);
+                std::cout << "status NOT ok: " << pos.status << "\n";
+                // assert(pos.status == failure_key_duplicated);
             }
             return std::make_pair(pos.index, pos.slot);
-
-            // return std::make_pair(iterator(map_.get().buckets_, pos.index, pos.slot),
-            //                       pos.status == ok);
-            // return upsert(
-            //     std::forward<K>(key), [](mapped_type &) {},
-            //     std::forward<Args>(val)...);
         }
 
         /** Searches the table for @p key, and returns the associated value it
@@ -212,19 +207,6 @@ namespace cuckoohashtable
             {
                 throw std::out_of_range("key not found in table :(");
             }
-
-            // const hash_value hv = hashed_key(key);
-            return true;
-            // const auto b = snapshot_and_lock_two<normal_mode>(hv);
-            // const table_position pos = cuckoo_find(key, hv.partial, b.i1, b.i2);
-            // if (pos.status == ok)
-            // {
-            //     return buckets_[pos.index].key(pos.slot);
-            // }
-            // else
-            // {
-            //     throw std::out_of_range("key not found in table");
-            // }
         }
 
     private:
@@ -263,10 +245,12 @@ namespace cuckoohashtable
         static inline size_type alt_index(const size_type hp, const size_type hv,
                                           const size_type index)
         {
-            // ensure tag is nonzero for the multiply. 0xc6a4a7935bd1e995 is the
+            // (libcuckoo) ensure tag is nonzero for the multiply. 0xc6a4a7935bd1e995 is the
             // hash constant from 64-bit MurmurHash2
             // const size_type nonzero_tag = static_cast<size_type>(partial) + 1;
-            return (index ^ (hv * 0xc6a4a7935bd1e995)) & hashmask(hp);
+            // (DRECHT) ensure tag is nonzero for the multiply
+            const size_t tag = (hv >> hp) + 1;
+            return (index ^ (tag * 0xc6a4a7935bd1e995)) & hashmask(hp);
         }
 
         class TwoBuckets
@@ -452,6 +436,8 @@ namespace cuckoohashtable
             {
                 assert(!buckets_[insert_bucket].occupied(insert_slot));
                 assert(insert_bucket == index_hash(hashpower(), hv) || insert_bucket == alt_index(hashpower(), hv, index_hash(hashpower(), hv)));
+
+                return table_position{insert_bucket, insert_slot, ok};
             }
             assert(st == failure);
             std::cout << "hashtable is full (hashpower = " << hashpower() << ", hash_items = " << size() << ", load factor = " << load_factor() << "), need to increase hashpower\n";
@@ -492,7 +478,7 @@ namespace cuckoohashtable
                     slot = i;
                 }
             }
-            std::cout << "slot: " << slot << "\n";
+            // std::cout << "slot: " << slot << "\n";
             return true;
         }
 
@@ -521,6 +507,7 @@ namespace cuckoohashtable
         cuckoo_status run_cuckoo(TwoBuckets &b, size_type &insert_bucket,
                                  size_type &insert_slot)
         {
+            std::cout << "run_cuckoo\n";
             // cuckoo_search and cuckoo_move
             size_type hp = hashpower();
             CuckooRecords cuckoo_path;
@@ -528,6 +515,7 @@ namespace cuckoohashtable
             while (!done)
             {
                 const int depth = cuckoopath_search(hp, cuckoo_path, b.i1, b.i2);
+                std::cout << "depth: " << depth << "\n";
                 if (depth < 0)
                 {
                     break;
@@ -535,8 +523,10 @@ namespace cuckoohashtable
 
                 if (cuckoopath_move(hp, cuckoo_path, depth, b))
                 {
+                    // store freed up bucket and slot
                     insert_bucket = cuckoo_path[0].bucket;
                     insert_slot = cuckoo_path[0].slot;
+                    std::cout << "insert: " << insert_bucket << ", " << insert_slot << "\n";
                     assert(insert_bucket == b.i1 || insert_bucket == b.i2);
                     assert(!buckets_[insert_bucket].occupied(insert_slot));
                     done = true;
@@ -567,27 +557,33 @@ namespace cuckoohashtable
             // end, using the final pathcode to figure out which bucket the path
             // starts on.
             CuckooRecord &first = cuckoo_path[0];
-            if(x.pathcode == 0) {
+            if (x.pathcode == 0)
+            {
                 first.bucket = i1;
-            } else {
+            }
+            else
+            {
                 assert(x.pathcode == 1);
                 first.bucket = i2;
             }
             {
                 const bucket &b = buckets_[first.bucket];
-                if (!b.occupied(first.slot)) {
+                if (!b.occupied(first.slot))
+                {
                     return 0;
                 }
                 first.hv = hashed_key(b.key(first.slot));
             }
-            for(int i = 1; i <= x.depth; ++i) {
+            for (int i = 1; i <= x.depth; ++i)
+            {
                 CuckooRecord &curr = cuckoo_path[i];
                 const CuckooRecord &prev = cuckoo_path[i - 1];
                 assert(prev.bucket == index_hash(hp, prev.hv) || prev.bucket == alt_index(hp, prev.hv, index_hash(hp, prev.hv)));
                 // We get the bucket that this slot is on by computing the alternate index of the previous bucket
                 curr.bucket = alt_index(hp, prev.hv, prev.bucket);
                 const bucket &b = buckets_[curr.bucket];
-                if(!b.occupied(curr.slot)) {
+                if (!b.occupied(curr.slot))
+                {
                     // We can terminate here!
                     return i;
                 }
@@ -600,6 +596,7 @@ namespace cuckoohashtable
         // an empty slot in one of the buckets in cuckoo_insert.
         bool cuckoopath_move(const size_type hp, CuckooRecords &cuckoo_path, size_type depth, TwoBuckets &b)
         {
+            // std::cout << "cuckoopath_move\n";
             if (depth == 0)
             {
                 // There is a chance that depth == 0, when try_add_to_bucket sees
@@ -608,10 +605,12 @@ namespace cuckoohashtable
                 assert(bucket_i == b.i1 || bucket_i == b.i2);
                 if (!buckets_[bucket_i].occupied(cuckoo_path[0].slot))
                 {
+                    std::cout << "found unoccupied\n";
                     return true;
                 }
                 else
                 {
+                    std::cout << "cuckoo bucket occupied :(\n";
                     return false;
                 }
             }
@@ -627,6 +626,8 @@ namespace cuckoohashtable
                 bucket &fb = buckets_[from.bucket];
                 bucket &tb = buckets_[to.bucket];
 
+                std::cout << "from: " << from.bucket << ", " << from.slot << "\n";
+                std::cout << "to: " << to.bucket << ", " << to.slot << "\n";
                 // checks valid cuckoo, and that the hash value is the same
                 if (tb.occupied(ts) || !fb.occupied(fs) || hashed_key(fb.key(fs)) != from.hv)
                 {
@@ -636,6 +637,7 @@ namespace cuckoohashtable
                 buckets_.setK(to.bucket, ts, std::move(fb.key(fs)));
                 buckets_.eraseK(from.bucket, fs);
                 depth--;
+                std::cout << "depth: " << depth << "\n";
             }
             return true;
         }
@@ -678,16 +680,19 @@ namespace cuckoohashtable
         };
 
         // b_queue is the queue used to store b_slots for BFS cuckoo hashing.
-        class b_queue {
-            public:
+        class b_queue
+        {
+        public:
             b_queue() noexcept : first_(0), last_(0) {}
 
-            void enqueue(b_slot x) {
+            void enqueue(b_slot x)
+            {
                 assert(!full());
                 slots_[last_++] = x;
             }
 
-            b_slot dequeue() {
+            b_slot dequeue()
+            {
                 assert(!empty());
                 assert(first_ < last_);
                 b_slot &x = slots_[first_++];
@@ -703,27 +708,67 @@ namespace cuckoohashtable
             // MAX_BFS_PATH_LEN search for two starting buckets, with no circular
             // wrapping-around. For one bucket, this is the geometric sum
             // sum_{k=0}^{MAX_BFS_PATH_LEN-1} slot_per_bucket()^k = (1 - slot_per_bucket()^MAX_BFS_PATH_LEN) / (1 - slot_per_bucket())
-            // 
+            //
             // Note that if slot_per_bucket() == 1, then this simply equals MAX_BFS_PATH_LEN.
             static_assert(slot_per_bucket() > 0, "SLOT_PER_BUCKET msut be greater than 0!");
-                static constexpr size_type MAX_CUCKOO_COUNT =
-        2 * ((slot_per_bucket() == 1)
-             ? MAX_BFS_PATH_LEN
-             : (const_pow(slot_per_bucket(), MAX_BFS_PATH_LEN) - 1) /
-               (slot_per_bucket() - 1));
-        
-        // An array of b_slots. Since we allocate just enough space to complete a full search,
-        // we should never exceed the end of the array.
-        b_slot slots_[MAX_CUCKOO_COUNT];
-        // The index of the head of the queue in the array
-        size_type first_;
-        // One past the index of the last_ item of the queue in the array.
-        size_type last_;
+            static constexpr size_type MAX_CUCKOO_COUNT =
+                2 * ((slot_per_bucket() == 1)
+                         ? MAX_BFS_PATH_LEN
+                         : (const_pow(slot_per_bucket(), MAX_BFS_PATH_LEN) - 1) /
+                               (slot_per_bucket() - 1));
 
+            // An array of b_slots. Since we allocate just enough space to complete a full search,
+            // we should never exceed the end of the array.
+            b_slot slots_[MAX_CUCKOO_COUNT];
+            // The index of the head of the queue in the array
+            size_type first_;
+            // One past the index of the last_ item of the queue in the array.
+            size_type last_;
         };
 
-        b_slot slot_search(const size_type hp, const size_type i1, const size_type i2) {
-            
+        // slot_search searches for a cuckoo path using breadth-first search. It
+        // starts with the i1 and i2 buckets, and, until it finds a bucket with an
+        // empty slot, adds each slot of the bucket in the b_slot. If the queue runs
+        // out of space, it fails.
+        //
+        // throws hashpower_changed if it changed during the search
+        b_slot slot_search(const size_type hp, const size_type i1, const size_type i2)
+        {
+            b_queue q;
+            // The initial pathcode informs cuckoopath_search which bucket the path starts on
+            q.enqueue(b_slot(i1, 0, 0));
+            q.enqueue(b_slot(i2, 1, 0));
+            while (!q.empty())
+            {
+                b_slot x = q.dequeue();
+                bucket &b = buckets_[x.bucket];
+                // Picks a (sort-of) random slot to start from
+                size_type starting_slot = x.pathcode % slot_per_bucket();
+                for (size_type i = 0; i < slot_per_bucket(); ++i)
+                {
+                    uint16_t slot = (starting_slot + i) % slot_per_bucket();
+                    if (!b.occupied(slot))
+                    {
+                        // We can terminate the search here
+                        x.pathcode = x.pathcode * slot_per_bucket() + slot;
+                        return x;
+                    }
+
+                    // If x has less than the maximum number of path components,
+                    // create a new b_slot item, that represents the bucket we could
+                    // have to come from if we kicked out the item at this slot.
+                    const size_type hv = b.key(slot);
+                    if (x.depth < MAX_BFS_PATH_LEN - 1)
+                    {
+                        assert(!q.full());
+                        b_slot y(alt_index(hp, hv, x.bucket), x.pathcode * slot_per_bucket() + slot, x.depth + 1);
+                        q.enqueue(y);
+                    }
+                }
+            }
+            // We didn't find a short-enough cuckoo path, so the search terminated :(
+            // Return a failure value
+            return b_slot(0, 0, -1);
         }
 
         // Miscellaneous functions

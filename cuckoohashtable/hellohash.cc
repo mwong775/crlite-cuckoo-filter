@@ -9,7 +9,7 @@ using namespace std;
 
 int main()
 {
-  int size = 10000000;
+  int size = 240000;
   int init_size = size / 0.95; // max load factor of 95%
   cout << "init size: " << init_size << "\n";
   cuckoohashtable::cuckoo_hashtable<int> Table(init_size); // , CityHasher<int>
