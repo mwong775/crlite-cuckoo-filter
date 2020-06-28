@@ -1,5 +1,5 @@
 # Cuckoo Hashing
-Cuckoo hashing techniques for storing and tracking all TLS certificate revocations
+Cuckoo hashing techniques to effectively store and track all TLS certificate revocations for web security
 
 ## Overview
 
