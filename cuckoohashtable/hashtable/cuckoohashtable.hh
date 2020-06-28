@@ -142,10 +142,10 @@ namespace cuckoohashtable
         void info() const
         {
             std::cout << "CuckooHashtable Status:\n"
-                      << "\t\tKeys stored: " << size() << "\n"
-                      << "\t\tBucket count: " << bucket_count() << "\n"
                       << "\t\tSlot per bucket: " << slot_per_bucket() << "\n"
-                      << "\t\tCapacity: " << capacity() << "\n"
+                      << "\t\tBucket count: " << bucket_count() << "\n"
+                      << "\t\tCapacity: " << capacity() << "\n\n"
+                      << "\t\tKeys stored: " << size() << "\n"
                       << "\t\tLoad factor: " << load_factor() << "\n";
             buckets_.info();
         }
@@ -526,7 +526,7 @@ namespace cuckoohashtable
                     // store freed up bucket and slot
                     insert_bucket = cuckoo_path[0].bucket;
                     insert_slot = cuckoo_path[0].slot;
-                    std::cout << "insert: " << insert_bucket << ", " << insert_slot << "\n";
+                    // std::cout << "insert: " << insert_bucket << ", " << insert_slot << "\n";
                     assert(insert_bucket == b.i1 || insert_bucket == b.i2);
                     assert(!buckets_[insert_bucket].occupied(insert_slot));
                     done = true;
@@ -626,8 +626,9 @@ namespace cuckoohashtable
                 bucket &fb = buckets_[from.bucket];
                 bucket &tb = buckets_[to.bucket];
 
-                std::cout << "from: " << from.bucket << ", " << from.slot << "\n";
-                std::cout << "to: " << to.bucket << ", " << to.slot << "\n";
+                // std::cout << "from: " << from.bucket << ", " << from.slot << "\n";
+                // std::cout << "to: " << to.bucket << ", " << to.slot << "\n";
+
                 // checks valid cuckoo, and that the hash value is the same
                 if (tb.occupied(ts) || !fb.occupied(fs) || hashed_key(fb.key(fs)) != from.hv)
                 {
@@ -637,7 +638,7 @@ namespace cuckoohashtable
                 buckets_.setK(to.bucket, ts, std::move(fb.key(fs)));
                 buckets_.eraseK(from.bucket, fs);
                 depth--;
-                std::cout << "depth: " << depth << "\n";
+                // std::cout << "depth: " << depth << "\n";
             }
             return true;
         }
