@@ -49,7 +49,7 @@ class CuckooFilter {
 
   HashFamily hasher_;
 
-  size_t *indices; // config rehashing
+  size_t *indices;  // config rehashing
 
   inline size_t IndexHash(uint32_t hv) const {
     // table_->num_buckets is always a power of two, so modulo can be replaced
@@ -65,8 +65,8 @@ class CuckooFilter {
     return tag;
   }
 
-  inline void GenerateIndexTagHash(const ItemType& item, size_t* index,
-                                   uint32_t* tag) const {
+  inline void GenerateIndexTagHash(const ItemType &item, size_t *index,
+                                   uint32_t *tag) const {
     const uint64_t hash = hasher_(item);
     *index = IndexHash(hash >> 32);
     *tag = TagHash(hash);
@@ -88,19 +88,27 @@ class CuckooFilter {
   double BitsPerItem() const { return 8.0 * table_->SizeInBytes() / Size(); }
 
  public:
-  explicit CuckooFilter(const size_t max_num_keys, const size_t bucket_count) : num_items_(0), victim_(), hasher_() { // max_num_keys
+  explicit CuckooFilter(const size_t max_num_keys, const size_t bucket_count)
+      : num_items_(0), victim_(), hasher_() {  // max_num_keys
     size_t assoc = 4;
-    // size_t num_buckets = upperpower2(std::max<uint64_t>(1, max_num_keys / assoc));
+    // size_t num_buckets = upperpower2(std::max<uint64_t>(1, max_num_keys /
+    // assoc));
     size_t num_buckets = bucket_count;
     // double frac = (double)max_num_keys / num_buckets / assoc;
     // if (frac > 0.96) {
     //   num_buckets <<= 1;
     // }
     victim_.used = false;
+    indices = new size_t[num_buckets]();  // () initializes all values to 0
+    for(int i = 0; i < sizeof(indices); i++) {
+      std::cout << indices[i] << "\n";
+    }
+    std::cout << "indices array size: " << (sizeof(indices)/sizeof(*indices)) << "\n";
     table_ = new TableType<bits_per_item>(num_buckets);
   }
 
-  ~CuckooFilter() { delete table_; }
+  // ~CuckooFilter() { delete table_; }
+  ~CuckooFilter() { delete table_; delete[] indices;}
 
   // Add an item to the filter.
   Status Add(const ItemType &item);
@@ -223,7 +231,8 @@ TryEliminateVictim:
 
 template <typename ItemType, size_t bits_per_item,
           template <size_t> class TableType, typename HashFamily>
-std::string CuckooFilter<ItemType, bits_per_item, TableType, HashFamily>::Info() const {
+std::string CuckooFilter<ItemType, bits_per_item, TableType, HashFamily>::Info()
+    const {
   std::stringstream ss;
   ss << "CuckooFilter Status:\n"
      << "\t\t" << table_->Info() << "\n"

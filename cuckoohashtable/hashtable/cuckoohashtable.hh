@@ -151,11 +151,10 @@ namespace cuckoohashtable
         }
 
         /**
-   * Inserts the key-value pair into the table. Equivalent to calling @ref
-   * upsert with a functor that does nothing.
+   * Inserts the key-value pair into the table.
    */
-        template <typename K>                           // , typename... Args
-        std::pair<size_type, size_type> insert(K &&key) // , Args &&... k
+        template <typename K>                          
+        std::pair<size_type, size_type> insert(K &&key)
         {
             // std::cout << "inserting " << key << "\n";
 
