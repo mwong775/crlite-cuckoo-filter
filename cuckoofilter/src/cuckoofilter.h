@@ -49,6 +49,8 @@ class CuckooFilter {
 
   HashFamily hasher_;
 
+  size_t *indices; // config rehashing
+
   inline size_t IndexHash(uint32_t hv) const {
     // table_->num_buckets is always a power of two, so modulo can be replaced
     // with
@@ -86,13 +88,14 @@ class CuckooFilter {
   double BitsPerItem() const { return 8.0 * table_->SizeInBytes() / Size(); }
 
  public:
-  explicit CuckooFilter(const size_t max_num_keys) : num_items_(0), victim_(), hasher_() {
+  explicit CuckooFilter(const size_t max_num_keys, const size_t bucket_count) : num_items_(0), victim_(), hasher_() { // max_num_keys
     size_t assoc = 4;
-    size_t num_buckets = upperpower2(std::max<uint64_t>(1, max_num_keys / assoc));
-    double frac = (double)max_num_keys / num_buckets / assoc;
-    if (frac > 0.96) {
-      num_buckets <<= 1;
-    }
+    // size_t num_buckets = upperpower2(std::max<uint64_t>(1, max_num_keys / assoc));
+    size_t num_buckets = bucket_count;
+    // double frac = (double)max_num_keys / num_buckets / assoc;
+    // if (frac > 0.96) {
+    //   num_buckets <<= 1;
+    // }
     victim_.used = false;
     table_ = new TableType<bits_per_item>(num_buckets);
   }

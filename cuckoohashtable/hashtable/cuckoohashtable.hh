@@ -507,7 +507,7 @@ namespace cuckoohashtable
         cuckoo_status run_cuckoo(TwoBuckets &b, size_type &insert_bucket,
                                  size_type &insert_slot)
         {
-            std::cout << "run_cuckoo\n";
+            // std::cout << "run_cuckoo\n";
             // cuckoo_search and cuckoo_move
             size_type hp = hashpower();
             CuckooRecords cuckoo_path;
@@ -515,7 +515,7 @@ namespace cuckoohashtable
             while (!done)
             {
                 const int depth = cuckoopath_search(hp, cuckoo_path, b.i1, b.i2);
-                std::cout << "depth: " << depth << "\n";
+                // std::cout << "depth: " << depth << "\n";
                 if (depth < 0)
                 {
                     break;

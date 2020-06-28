@@ -24,7 +24,7 @@ int main(int argc, char **argv)
     typedef uint32_t KeyType;
     cuckoohashtable::cuckoo_hashtable<KeyType> Table(init_size);
     // should pass table init configs to filter: rows/bucket count & capacity
-    cuckoofilter::CuckooFilter<size_t, 12> cf(init_size);
+    cuckoofilter::CuckooFilter<size_t, 12> cf(init_size, Table.bucket_count());
 
     vector<uint64_t> r;
     vector<uint64_t> s;
