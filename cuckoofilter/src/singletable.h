@@ -181,16 +181,21 @@ class SingleTable {
   }
 
   inline bool PairedInsertTagToBucket(const size_t i, const size_t j,
-                                      const uint32_t tag) {
+                                      const uint32_t tag, const bool kickout = false, uint32_t &oldtag = 0) {
     // std::cout << "Bucket insert: " << i << ", " << j << "\n\n";
     if (ReadTag(i, j) == 0) {
       WriteTag(i, j, tag);
       return true;
     } else {
-      std::cout << "error on CopyInsertTagToBucket: slot filled?!?! "
+      if (kickout) {
+        oldtag = ReadTag(i, j);
+              std::cout << "slot filled -  "
                    "\n\toccupying tag: "
-                << ReadTag(i, j) << "\n\tlocation: " << i << " and " << j
+                << oldtag << "\n\tpos: " << i << " and " << j
                 << "\n\tinserting tag: " << tag << "\n";
+        WriteTag(i, j, tag);
+
+      }
       return false;
     }
   }
