@@ -43,8 +43,10 @@ int main(int argc, char **argv)
 
     // add set R to filter
     // cout << "R INSERT\n";
-    for (auto c : r)
+    for (size_t i = 0; i < r.size(); i++)
+    // for (auto c : r)
     {
+        auto c = r.at(i);
         // cout << c << " ";
         cp.insert(c);
         cf.Add(c);
@@ -95,7 +97,7 @@ int main(int argc, char **argv)
 */
 
 
-    cp.hashInfo();
+    // cp.hashInfo();
     cp.info();
     cout << "orig. CF:\n"
          << cf.Info() << "\n";

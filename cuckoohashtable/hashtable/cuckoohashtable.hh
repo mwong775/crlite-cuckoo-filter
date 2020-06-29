@@ -27,7 +27,6 @@
 
 // #include "../city_hasher.hh"
 
-
 namespace cuckoohashtable
 {
 
@@ -208,7 +207,7 @@ namespace cuckoohashtable
             auto b = compute_buckets(hv);
             table_position pos = cuckoo_insert_loop(hv, b, key, cuckoo_trail); // finds insert spot, does not actually insert
             // std::cout << "HT inserting key " << key << ": " << pos.index << ", " << pos.slot << "\n";// status: " << pos.status << "\n";
-            
+
             // add to bucket
             if (pos.status == ok)
             {
@@ -277,7 +276,9 @@ namespace cuckoohashtable
         // could be.
         static inline size_type index_hash(const size_type hp, const size_type hv)
         {
-            return hv & hashmask(hp);
+            const uint32_t hash = hv >> 32;
+            return hash & hashmask(hp);
+            // return hv & hashmask(hp);
         }
 
         // alt_index returns the other possible bucket that the given hashed key

@@ -47,7 +47,7 @@ class SingleTable {
 
   std::string Info() const {
     std::stringstream ss;
-    ss << PrintTable() << "\n";
+    // ss << PrintTable() << "\n";
     ss << "SingleHashtable with tag size: " << bits_per_tag << " bits \n";
     ss << "\t\tAssociativity: " << kTagsPerBucket << "\n";
     ss << "\t\tTotal # of rows: " << num_buckets_ << "\n";
