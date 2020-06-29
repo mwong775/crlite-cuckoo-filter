@@ -4,6 +4,7 @@
 #include "cuckoofilter/src/cuckoofilter.h"
 #include "cuckoohashtable/hashtable/cuckoohashtable.hh"
 #include <math.h>
+#include <bits/stdc++.h> 
 
 using namespace std;
 
@@ -35,17 +36,15 @@ public:
     void insert(const KeyType &key)
     {
         // first insert key into hashtable to get storage location (index & slot)
-        vector<pair<size_t, size_t>> cuckoo_trail = table_->paired_insert(key);
-        if(cuckoo_trail.size() > 1) {
-            cout << "cuckoo trail for CF:\n";
-            for( auto pos : cuckoo_trail) {
-            cout  << pos.first << ", " << pos.second << "\n";
-            }
-        } else {
-            // cout  << cuckoo_trail[0].first << ", " << cuckoo_trail[0].second << "\n";
-        }
+        stack<pair<size_t, size_t>> cuckoo_trail = table_->paired_insert(key);
+
+        // if(cuckoo_trail.size() > 1) {
+        //     cout << "cuckoo trail for CF\n";
+        // }
+        // cout  << cuckoo_trail.top().first << ", " << cuckoo_trail.top().second << "\n";
+
         // insert at same corresponding location in filter
-        assert(filter_->PairedInsert(key, cuckoo_trail[0].first, cuckoo_trail[0].second) == cuckoofilter::Ok);
+        assert(filter_->PairedInsert(key, cuckoo_trail) == cuckoofilter::Ok);
         assert(filter_->Lookup(key) == cuckoofilter::Ok);
         // if(cf.Contain(c) != cuckoofilter::Ok) {
         //     cout << "ERROR\n";
@@ -55,7 +54,7 @@ public:
 
     bool lookup(const KeyType &key)
     {
-        return filter_->Contain(key) != cuckoofilter::NotFound;
+        return filter_->Lookup(key) != cuckoofilter::NotFound;
     }
 
     void info()

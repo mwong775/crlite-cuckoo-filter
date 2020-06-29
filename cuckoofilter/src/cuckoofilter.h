@@ -5,6 +5,7 @@
 #include <math.h>
 #include <algorithm>
 
+#include <bits/stdc++.h>
 #include "debug.h"
 #include "hashutil.h"
 #include "packedtable.h"
@@ -96,14 +97,15 @@ class CuckooFilter {
   inline size_t AltIndexItem(const size_t index, const uint64_t hv) const {
     size_t hp = log2(table_->NumBuckets());
     const size_t tag = (hv >> hp) + 1;
-    // std::cout << "CF hp: " << hp << ", right shift: " << tag << " tag: " << hv
+    // std::cout << "CF hp: " << hp << ", right shift: " << tag << " tag: " <<
+    // hv
     //           << "\n";
 
     // ^ (bitwise XOR), & (bitwise AND)
     return (index ^ (tag * 0xc6a4a7935bd1e995)) & (table_->NumBuckets() - 1);
   }
 
-  Status PairedInsertImpl(const size_t index, const size_t slot,
+  Status PairedInsertImpl(std::stack<std::pair<size_t, size_t>> &trail,
                           const uint32_t tag);
 
   Status AddImpl(const size_t i, const uint32_t tag);
@@ -143,8 +145,8 @@ class CuckooFilter {
 
   // Inserts an item to the filter at a specific location,
   // given index and slot.
-  Status PairedInsert(const ItemType &item, const size_t index,
-                      const size_t slot);
+  Status PairedInsert(const ItemType &item,
+                      std::stack<std::pair<size_t, size_t>> &trail);
 
   // Report if the item is inserted, using traditional cuckoo hashing.
   // ideally eventual false positive rate of zero.
@@ -172,28 +174,51 @@ class CuckooFilter {
 
 template <typename ItemType, size_t bits_per_item,
           template <size_t> class TableType, typename HashFamily>
-Status CuckooFilter<ItemType, bits_per_item, TableType,
-                    HashFamily>::PairedInsert(const ItemType &item,
-                                              const size_t index,
-                                              const size_t slot) {
+Status
+CuckooFilter<ItemType, bits_per_item, TableType, HashFamily>::PairedInsert(
+    const ItemType &item, std::stack<std::pair<size_t, size_t>> &trail) {
   uint32_t tag;
   GenerateTagHash(item, &tag);
-  return PairedInsertImpl(index, slot, tag);
+  return PairedInsertImpl(trail, tag);
 }
 
 template <typename ItemType, size_t bits_per_item,
           template <size_t> class TableType, typename HashFamily>
-Status CuckooFilter<ItemType, bits_per_item, TableType,
-                    HashFamily>::PairedInsertImpl(const size_t index,
-                                                  const size_t slot,
-                                                  const uint32_t genTag) {
+Status
+CuckooFilter<ItemType, bits_per_item, TableType, HashFamily>::PairedInsertImpl(
+    std::stack<std::pair<size_t, size_t>> &trail, const uint32_t genTag) {
   uint32_t tag = genTag;
-  if (table_->PairedInsertTagToBucket(index, slot, tag)) {
-    num_items_++;
-    return Ok;
-  } else {
-    return NotSupported;
+  uint32_t oldtag;
+
+  if (trail.size() > 1)
+    std::cout << "cuckoo trail length: " << trail.size() << "\n";
+
+  while (!trail.empty()) {
+    bool kickout = trail.size() > 1;
+    std::pair<size_t, size_t> location = trail.top();
+    size_t index = location.first;
+    size_t slot = location.second;
+
+    // std::cout << "tag " << tag << ": " <<  index << ", " << slot << "\t";
+    if (table_->PairedInsertTagToBucket(index, slot, tag, kickout, oldtag)) {
+      num_items_++;
+      // std::cout << "\n";
+      return Ok;
+    }
+    if (kickout) {
+      tag = oldtag;
+    }
+
+    trail.pop();
   }
+
+  // victim_.index = index;
+  // victim_.tag = tag;
+  // victim_.used = true;
+  return Ok;
+  // } else {
+  //   return NotSupported;
+  // }
 }
 
 template <typename ItemType, size_t bits_per_item,
@@ -253,7 +278,8 @@ Status CuckooFilter<ItemType, bits_per_item, TableType, HashFamily>::Lookup(
 
   assert(i1 == AltIndexItem(i2, hv));
 
-  // std::cout << "CF Contain? buckets " << i1 << " and " << i2 << "\n\n";
+  // std::cout << "CF Lookup " << tag << "? buckets " << i1 << " and " << i2 <<
+  // "\n\n";
 
   found = victim_.used && (tag == victim_.tag) &&
           (i1 == victim_.index || i2 == victim_.index);
