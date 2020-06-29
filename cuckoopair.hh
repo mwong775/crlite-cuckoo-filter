@@ -5,17 +5,16 @@
 #include "cuckoohashtable/hashtable/cuckoohashtable.hh"
 #include <math.h>
 #include <bits/stdc++.h> 
+#include "cuckoohashtable/city_hasher.hh"
 
 using namespace std;
 
-template <typename KeyType, size_t bits_per_fp>
+template <typename KeyType, size_t bits_per_fp, class Hash = CityHasher<KeyType>>
 class cuckoo_pair
 {
-    cuckoohashtable::cuckoo_hashtable<KeyType> *table_;
+    cuckoohashtable::cuckoo_hashtable<KeyType> *table_; // , CityHasher<KeyType>
     cuckoofilter::CuckooFilter<KeyType, bits_per_fp> *filter_;
 private:
-    // using hashtable_t = cuckoohashtable::cuckoo_hashtable<KeyType>;
-    // using filter_t = cuckoofilter::CuckooFilter<KeyType, bits_per_fp>;
     size_t num_items_;
     size_t size_;
 
@@ -45,18 +44,30 @@ public:
 
         // insert at same corresponding location in filter
         assert(filter_->PairedInsert(key, cuckoo_trail) == cuckoofilter::Ok);
-        // assert(filter_->Lookup(key) == cuckoofilter::Ok);
+        // cout << "lup after ins\n";
+        assert(filter_->Contain(key) == cuckoofilter::Ok);
     }
 
     bool lookup(const KeyType &key)
     {
-        return filter_->Lookup(key) != cuckoofilter::NotFound;
+        // extra check for fp lookup: hashtable should not have fp's at all
+        // if(table_->find(key)) {
+        //     cout << "ERROR: fp in hashtable?!?!\n";
+        //     return true;
+        // }
+
+        // return table_->find(key);
+        return filter_->Contain(key) == cuckoofilter::Ok;
     }
 
     void info()
     {
         table_->info();
         cout << filter_->Info() << "\n";
+    }
+
+    void hashInfo() {
+        table_->hashInfo();
     }
     // hashtable_t table_;
     // filter_t filter_;

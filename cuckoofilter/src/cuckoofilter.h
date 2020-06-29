@@ -65,6 +65,8 @@ class CuckooFilter {
 
   inline uint32_t TagHash(uint32_t hv) const {
     uint32_t tag;
+    // tag = (static_cast<uint32_t>(hv)^static_cast<uint32_t>(hv >>
+    // bits_per_item));
     tag = hv & ((1ULL << bits_per_item) - 1);
     tag += (tag == 0);
     return tag;
@@ -82,32 +84,42 @@ class CuckooFilter {
     if (!paired_) {
       *index = IndexHash(hash >> 32);
     } else {
-      // updated to match hashtable (hp = (table_->NumBuckets() - 1))
-      size_t hp = table_->NumBuckets() - 1;  // no log?
-      *index = hash & hp;
+      // updated to match hashtable (hm = (table_->NumBuckets() - 1))
+      *index = IndexHash(hash);
     }
     *tag = TagHash(hash);
   }
 
-  inline size_t AltIndex(const size_t index, const uint32_t tag) const {
+  // if paired cuckoo hashing, find alt using hashed item/key
+  inline size_t AltIndex(const size_t index, const uint32_t tag,
+                         const uint64_t hv = 0) const {
     // NOTE(binfan): originally we use:
     // index ^ HashUtil::BobHash((const void*) (&tag), 4)) & table_->INDEXMASK;
     // now doing a quick-n-dirty way:
     // 0x5bd1e995 is the hash constant from MurmurHash2
-    return IndexHash((uint32_t)(index ^ (tag * 0x5bd1e995)));
+    if (paired_) {
+      size_t hp = log2(table_->NumBuckets());
+      // size_t hm = table_->NumBuckets() - 1;
+      const size_t tag = (hv >> hp) + 1;
+
+      return IndexHash((uint32_t)(index ^ (tag * 0xc6a4a7935bd1e995)));
+    } else
+      return IndexHash((uint32_t)(index ^ (tag * 0x5bd1e995)));
   }
 
   // takes fully hashed key, rather than tag of fixed number of bits
-  inline size_t AltIndexItem(const size_t index, const uint64_t hv) const {
-    size_t hp = log2(table_->NumBuckets());
-    const size_t tag = (hv >> hp) + 1;
-    // std::cout << "CF hp: " << hp << ", right shift: " << tag << " tag: " <<
-    // hv
-    //           << "\n";
+  // inline size_t AltIndexItem(const size_t index, const uint64_t hv) const {
+  //   size_t hp = log2(table_->NumBuckets());
+  //   size_t hm = table_->NumBuckets() - 1;
+  //   const size_t tag = (hv >> hp) + 1;
+  //   // std::cout << "CF hp: " << hp << ", right shift: " << tag << " tag: "
+  //   << hv
+  //   //           << "\n";
+  //   // std::cout << "CF hashmask (hm): " << hm << "\n";
 
-    // ^ (bitwise XOR), & (bitwise AND)
-    return (index ^ (tag * 0xc6a4a7935bd1e995)) & (table_->NumBuckets() - 1);
-  }
+  //   // ^ (bitwise XOR), & (bitwise AND)
+  //   return (index ^ (tag * 0xc6a4a7935bd1e995)) & hm;
+  // }
 
   Status PairedInsertImpl(std::stack<std::pair<size_t, size_t>> &trail,
                           const uint32_t tag);
@@ -171,10 +183,6 @@ class CuckooFilter {
   Status PairedInsert(const ItemType &item,
                       std::stack<std::pair<size_t, size_t>> &trail);
 
-  // Report if the item is inserted, using traditional cuckoo hashing.
-  // ideally eventual false positive rate of zero.
-  Status Lookup(const ItemType &item) const;
-
   // Add an item to the filter.
   Status Add(const ItemType &item);
 
@@ -200,16 +208,25 @@ template <typename ItemType, size_t bits_per_item,
 Status
 CuckooFilter<ItemType, bits_per_item, TableType, HashFamily>::PairedInsert(
     const ItemType &item, std::stack<std::pair<size_t, size_t>> &trail) {
+  size_t i;
   uint32_t tag;
   GenerateTagHash(item, &tag);
+  // GenerateIndexTagHash(item, &i, &tag);
+  // std::cout << "trail index: " << trail.top().first << " genIndex: " << i <<
+  // "\n";
+
+  // if (trail.size() > 1)
   return PairedInsertImpl(trail, tag);
+  // else
+  // return AddImpl(i, tag);
 }
 
 template <typename ItemType, size_t bits_per_item,
           template <size_t> class TableType, typename HashFamily>
-Status
-CuckooFilter<ItemType, bits_per_item, TableType, HashFamily>::PairedInsertImpl(
+Status CuckooFilter<ItemType, bits_per_item, TableType,
+                    HashFamily>::PairedInsertImpl(  // const size_t i,
     std::stack<std::pair<size_t, size_t>> &trail, const uint32_t genTag) {
+  // size_t index = i;
   uint32_t tag = genTag;
   uint32_t oldtag;
 
@@ -222,7 +239,8 @@ CuckooFilter<ItemType, bits_per_item, TableType, HashFamily>::PairedInsertImpl(
     size_t index = location.first;
     size_t slot = location.second;
 
-    // std::cout << "tag " << tag << ": " <<  index << ", " << slot << "\t";
+    // std::cout << "inserting tag " << tag << ": " << index << ", " << slot
+    //           << "\t";
     if (table_->PairedInsertTagToBucket(index, slot, tag, kickout, oldtag)) {
       num_items_++;
       // std::cout << "\n";
@@ -231,7 +249,8 @@ CuckooFilter<ItemType, bits_per_item, TableType, HashFamily>::PairedInsertImpl(
     if (kickout) {
       tag = oldtag;
     }
-
+    // index = location.first;
+    // slot = location.second;
     trail.pop();
   }
 
@@ -288,53 +307,37 @@ Status CuckooFilter<ItemType, bits_per_item, TableType, HashFamily>::AddImpl(
 
 template <typename ItemType, size_t bits_per_item,
           template <size_t> class TableType, typename HashFamily>
-Status CuckooFilter<ItemType, bits_per_item, TableType, HashFamily>::Lookup(
-    const ItemType &key) const {
-  bool found = false;
-  size_t i1, i2;
-  uint32_t tag;
-
-  GenerateIndexTagHash(key, &i1, &tag);
-  // i2 = AltIndex(i1, tag);
-  uint64_t hv = hasher_(key);
-  i2 = AltIndexItem(i1, hv);
-
-  assert(i1 == AltIndexItem(i2, hv));
-
-  // std::cout << "CF Lookup " << tag << "? buckets " << i1 << " and " << i2 <<
-  // "\n\n";
-
-  found = victim_.used && (tag == victim_.tag) &&
-          (i1 == victim_.index || i2 == victim_.index);
-
-  if (found || table_->FindTagInBuckets(i1, i2, tag)) {
-    std::cout << "paired CF found " << tag << " in either " << i1 << " or "
-              << i2 << "\n";
-    return Ok;
-  } else {
-    return NotFound;
-  }
-}
-
-template <typename ItemType, size_t bits_per_item,
-          template <size_t> class TableType, typename HashFamily>
 Status CuckooFilter<ItemType, bits_per_item, TableType, HashFamily>::Contain(
     const ItemType &key) const {
   bool found = false;
   size_t i1, i2;
   uint32_t tag;
+  uint64_t hv;
 
   GenerateIndexTagHash(key, &i1, &tag);
-  i2 = AltIndex(i1, tag);
 
-  assert(i1 == AltIndex(i2, tag));
+  if (paired_) {
+    // use standard cuckoo hashing with item
+    hv = hasher_(key);
+    i2 = AltIndex(i1, tag, hv);
+    assert(i1 == AltIndex(i2, tag, hv));
+
+  } else {
+    // partial cuckoo hashing with tag only
+    i2 = AltIndex(i1, tag);
+    assert(i1 == AltIndex(i2, tag));
+  }
 
   found = victim_.used && (tag == victim_.tag) &&
           (i1 == victim_.index || i2 == victim_.index);
 
   if (found || table_->FindTagInBuckets(i1, i2, tag)) {
-    std::cout << "orig. CF found " << tag << " in either " << i1 << " or " << i2
-              << "\n";
+    // std::cout << "CF Contain: " << key;
+    // if (paired_) {
+    //   std::cout << " hv: " << hv;
+    // }
+    // std::cout << " tag: " << tag << " found in either bucket " << i1 << " or "
+    //           << i2 << "\n\n";
 
     return Ok;
   } else {

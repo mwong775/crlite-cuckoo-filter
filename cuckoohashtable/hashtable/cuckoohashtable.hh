@@ -175,7 +175,6 @@ namespace cuckoohashtable
             // get hashed key
             size_type hv = hashed_key(key);
             std::cout << "HT inserting " << key << " hv: " << hv << "\n";
-            // std::cout << "HT hashed key: " << hv << "\n";
             // find position in table
             auto b = compute_buckets(hv);
             table_position pos = cuckoo_insert_loop(hv, b, key); // finds insert spot, does not actually insert
@@ -203,12 +202,13 @@ namespace cuckoohashtable
             std::stack<std::pair<size_type, size_type>> cuckoo_trail;
             // get hashed key
             size_type hv = hashed_key(key);
-            std::cout << "HT inserting " << key << " hv: " << hv << "\n";
-            // std::cout << "HT hashed key: " << hv << "\n";
+            // std::cout << "HT inserting " << key << " hv: " << hv << "\n";
+
             // find position in table
             auto b = compute_buckets(hv);
             table_position pos = cuckoo_insert_loop(hv, b, key, cuckoo_trail); // finds insert spot, does not actually insert
-            std::cout << "HT inserting key " << key << ": " << pos.index << ", " << pos.slot << "\n";// status: " << pos.status << "\n";
+            // std::cout << "HT inserting key " << key << ": " << pos.index << ", " << pos.slot << "\n";// status: " << pos.status << "\n";
+            
             // add to bucket
             if (pos.status == ok)
             {
@@ -235,10 +235,8 @@ namespace cuckoohashtable
         template <typename K>
         key_type find(const K &key) const
         {
-            // std::cout << "finding " << key << "\n";
             // get hashed key
             size_type hv = hashed_key(key);
-            // std::cout << "hashed key: " << hv << "\n";
             // find position in table
             auto b = compute_buckets(hv);
             // search in both buckets
@@ -323,7 +321,9 @@ namespace cuckoohashtable
             const size_type hp = hashpower();
             const size_type i1 = index_hash(hp, hv);
             const size_type i2 = alt_index(hp, hv, i1);
-            std::cout << "HT computed buckets " << i1 << " and " << i2 << "\n";
+
+            // std::cout << "HT computed buckets " << i1 << " and " << i2 << "\n";
+
             return TwoBuckets(i1, i2);
         }
 
