@@ -122,7 +122,7 @@ namespace cuckoohashtable
             std::cout << "BucketContainer status:\n"
                       << "\t\tslots per bucket: " << SLOT_PER_BUCKET << "\n\n";
 
-            // print();
+            print();
         }
 
         void print() const

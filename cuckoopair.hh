@@ -23,7 +23,7 @@ public:
     {
         size_ = n / 0.95;
         table_ = new cuckoohashtable::cuckoo_hashtable<KeyType>(size_);
-        filter_ = new cuckoofilter::CuckooFilter<KeyType, bits_per_fp>(size_, table_->bucket_count());
+        filter_ = new cuckoofilter::CuckooFilter<KeyType, bits_per_fp>(size_, table_->bucket_count(), table_->hash_function());
     }
 
     ~cuckoo_pair()
@@ -34,10 +34,19 @@ public:
 
     void insert(const KeyType &key)
     {
-        pair<size_t, size_t> location = table_.insert(key);
-
-        assert(filter_.Add(key) == cuckoofilter::Ok);
-        assert(filter_.Contain(key) == cuckoofilter::Ok);
+        // first insert key into hashtable to get storage location (index & slot)
+        vector<pair<size_t, size_t>> cuckoo_trail = table_->paired_insert(key);
+        if(cuckoo_trail.size() > 1) {
+            cout << "cuckoo trail for CF:\n";
+            for( auto pos : cuckoo_trail) {
+            cout  << pos.first << ", " << pos.second << "\n";
+            }
+        } else {
+            // cout  << cuckoo_trail[0].first << ", " << cuckoo_trail[0].second << "\n";
+        }
+        // insert at same corresponding location in filter
+        assert(filter_->PairedInsert(key, cuckoo_trail[0].first, cuckoo_trail[0].second) == cuckoofilter::Ok);
+        assert(filter_->Lookup(key) == cuckoofilter::Ok);
         // if(cf.Contain(c) != cuckoofilter::Ok) {
         //     cout << "ERROR\n";
         //     return 1;
@@ -46,13 +55,13 @@ public:
 
     bool lookup(const KeyType &key)
     {
-        return filter_.Contain(key) != cuckoofilter::NotFound;
+        return filter_->Contain(key) != cuckoofilter::NotFound;
     }
 
     void info()
     {
-        table_.info();
-        cout << filter_.Info() << "\n";
+        table_->info();
+        cout << filter_->Info() << "\n";
     }
     // hashtable_t table_;
     // filter_t filter_;

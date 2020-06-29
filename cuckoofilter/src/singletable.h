@@ -21,7 +21,7 @@ class SingleTable {
   // NOTE: accomodate extra buckets if necessary to avoid overrun
   // as we always read a uint64
   static const size_t kPaddingBuckets =
-    ((((kBytesPerBucket + 7) / 8) * 8) - 1) / kBytesPerBucket;
+      ((((kBytesPerBucket + 7) / 8) * 8) - 1) / kBytesPerBucket;
 
   struct Bucket {
     char bits_[kBytesPerBucket];
@@ -37,24 +37,17 @@ class SingleTable {
     memset(buckets_, 0, kBytesPerBucket * (num_buckets_ + kPaddingBuckets));
   }
 
-  ~SingleTable() { 
-    delete[] buckets_;
-  }
+  ~SingleTable() { delete[] buckets_; }
 
-  size_t NumBuckets() const {
-    return num_buckets_;
-  }
+  size_t NumBuckets() const { return num_buckets_; }
 
-  size_t SizeInBytes() const { 
-    return kBytesPerBucket * num_buckets_; 
-  }
+  size_t SizeInBytes() const { return kBytesPerBucket * num_buckets_; }
 
-  size_t SizeInTags() const { 
-    return kTagsPerBucket * num_buckets_; 
-  }
+  size_t SizeInTags() const { return kTagsPerBucket * num_buckets_; }
 
   std::string Info() const {
     std::stringstream ss;
+    ss << PrintTable() << "\n";
     ss << "SingleHashtable with tag size: " << bits_per_tag << " bits \n";
     ss << "\t\tAssociativity: " << kTagsPerBucket << "\n";
     ss << "\t\tTotal # of rows: " << num_buckets_ << "\n";
@@ -187,8 +180,24 @@ class SingleTable {
     return false;
   }
 
+  inline bool PairedInsertTagToBucket(const size_t i, const size_t j,
+                                      const uint32_t tag) {
+    // std::cout << "Bucket insert: " << i << ", " << j << "\n\n";
+    if (ReadTag(i, j) == 0) {
+      WriteTag(i, j, tag);
+      return true;
+    } else {
+      std::cout << "error on CopyInsertTagToBucket: slot filled?!?! "
+                   "\n\toccupying tag: "
+                << ReadTag(i, j) << "\n\tlocation: " << i << " and " << j
+                << "\n\tinserting tag: " << tag << "\n";
+      return false;
+    }
+  }
+
   inline bool InsertTagToBucket(const size_t i, const uint32_t tag,
-                                const bool kickout, uint32_t &oldtag) {
+                                const bool kickout = false,
+                                uint32_t &oldtag = 0) {
     for (size_t j = 0; j < kTagsPerBucket; j++) {
       if (ReadTag(i, j) == 0) {
         WriteTag(i, j, tag);
@@ -212,6 +221,27 @@ class SingleTable {
     }
     return num;
   }
+
+  std::string PrintTable() const {
+    std::stringstream ss;
+
+    for (size_t i = 0; i < num_buckets_; i++) {
+      ss << "[ ";
+      for (size_t j = 0; j < kTagsPerBucket; j++) {
+        if (ReadTag(i, j) != 0) {
+          ss << ReadTag(i, j);
+        } else {
+          ss << " ";
+        }
+        if (j < kTagsPerBucket - 1) {
+          ss << ", ";
+        }
+      }
+      ss << "]\n";
+    }
+    return ss.str();
+  }
 };
+
 }  // namespace cuckoofilter
 #endif  // CUCKOO_FILTER_SINGLE_TABLE_H_
