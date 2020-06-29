@@ -1,5 +1,3 @@
-#include "cuckoofilter/src/cuckoofilter.h"
-#include "cuckoohashtable/hashtable/cuckoohashtable.hh"
 #include "cuckoopair.hh"
 #include <math.h>
 
@@ -19,13 +17,16 @@ int main(int argc, char **argv)
     int seed = 1;
     mt19937 rd(seed);
 
-    int size = 240;               // 240000 for ~91% load factor
+    typedef uint64_t KeyType;
+    int size = 500;               // 240000 for ~91% load factor
     int init_size = size / 0.95; // max load factor of 95%
     cout << "init size: " << init_size << "\n";
-    cuckoo_pair<int, 12> cp(size);
+    cuckoo_pair<KeyType, 12> cp(size);
 
-    vector<uint64_t> r;
-    vector<uint64_t> s;
+    // cp.info();
+
+    vector<KeyType> r;
+    vector<KeyType> s;
 
     // 64-bit random numbers to insert and lookup -> lookup_size = insert_size * 100
     random_gen(size, r, rd);
@@ -34,6 +35,8 @@ int main(int argc, char **argv)
     // add set R to filter
     for (auto c : r)
     {
+        // cout << c << " ";
+        cp.insert(c);
     }
 
         // lookup set S and count false positives
@@ -52,6 +55,7 @@ int main(int argc, char **argv)
     cout << "total fp's: " << false_queries << " out of " << total_queries << "\n";
     cout << "false positive rate is " << 100.0 * false_queries / total_queries << "%\n";
 
+    cp.info();
 
     return 0;
 }
