@@ -24,7 +24,7 @@ public:
     {
         size_ = n / 0.95;
         table_ = new cuckoohashtable::cuckoo_hashtable<KeyType>(size_);
-        filter_ = new cuckoofilter::CuckooFilter<KeyType, bits_per_fp>(size_, table_->bucket_count(), table_->hash_function());
+        filter_ = new cuckoofilter::CuckooFilter<KeyType, bits_per_fp>(size_, table_->hash_function(), table_->bucket_count());
     }
 
     ~cuckoo_pair()
@@ -45,11 +45,7 @@ public:
 
         // insert at same corresponding location in filter
         assert(filter_->PairedInsert(key, cuckoo_trail) == cuckoofilter::Ok);
-        assert(filter_->Lookup(key) == cuckoofilter::Ok);
-        // if(cf.Contain(c) != cuckoofilter::Ok) {
-        //     cout << "ERROR\n";
-        //     return 1;
-        // }
+        // assert(filter_->Lookup(key) == cuckoofilter::Ok);
     }
 
     bool lookup(const KeyType &key)

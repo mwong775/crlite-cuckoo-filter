@@ -663,8 +663,8 @@ namespace cuckoohashtable
                 bucket &fb = buckets_[from.bucket];
                 bucket &tb = buckets_[to.bucket];
 
-                std::cout << "from: " << from.bucket << ", " << from.slot << "\n";
-                std::cout << "to: " << to.bucket << ", " << to.slot << "\n";
+                // std::cout << "from: " << from.bucket << ", " << from.slot << "\n";
+                // std::cout << "to: " << to.bucket << ", " << to.slot << "\n";
 
                 // checks valid cuckoo, and that the hash value is the same
                 if (tb.occupied(ts) || !fb.occupied(fs) || hashed_key(fb.key(fs)) != from.hv)

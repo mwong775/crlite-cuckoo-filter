@@ -52,7 +52,9 @@ class CuckooFilter {
 
   HashFamily hasher_;
 
-  size_t *indices;  // config rehashing
+  size_t *indices_;  // config rehashing
+
+  bool paired_;
 
   inline size_t IndexHash(uint32_t hv) const {
     // table_->num_buckets is always a power of two, so modulo can be replaced
@@ -77,11 +79,13 @@ class CuckooFilter {
   inline void GenerateIndexTagHash(const ItemType &item, size_t *index,
                                    uint32_t *tag) const {
     const uint64_t hash = hasher_(item);
-    // *index = IndexHash(hash >> 32);
-
-    // updated to match hashtable (hp = (table_->NumBuckets() - 1))
-    size_t hp = table_->NumBuckets() - 1;  // no log?
-    *index = hash & hp;
+    if (!paired_) {
+      *index = IndexHash(hash >> 32);
+    } else {
+      // updated to match hashtable (hp = (table_->NumBuckets() - 1))
+      size_t hp = table_->NumBuckets() - 1;  // no log?
+      *index = hash & hp;
+    }
     *tag = TagHash(hash);
   }
 
@@ -116,9 +120,28 @@ class CuckooFilter {
   double BitsPerItem() const { return 8.0 * table_->SizeInBytes() / Size(); }
 
  public:
-  explicit CuckooFilter(const size_t max_num_keys, const size_t bucket_count,
-                        const HashFamily &hf)
+  // original constructor
+  explicit CuckooFilter(const size_t max_num_keys)
+      : num_items_(0), victim_(), hasher_() {
+    // std::cout << "CF orig. constructor\n";
+    paired_ = false;
+    size_t assoc = 4;
+    size_t num_buckets =
+        upperpower2(std::max<uint64_t>(1, max_num_keys / assoc));
+    double frac = (double)max_num_keys / num_buckets / assoc;
+    if (frac > 0.96) {
+      num_buckets <<= 1;
+    }
+    victim_.used = false;
+    table_ = new TableType<bits_per_item>(num_buckets);
+  }
+
+  // modified for paired cuckoo stuff
+  explicit CuckooFilter(const size_t max_num_keys, const HashFamily &hf,
+                        const size_t bucket_count)
       : num_items_(0), victim_(), hasher_(hf) {  // max_num_keys
+    // std::cout << "CF mod constructor\n";
+    paired_ = true;
     size_t assoc = 4;
     // size_t num_buckets = upperpower2(std::max<uint64_t>(1, max_num_keys /
     // assoc));
@@ -128,7 +151,7 @@ class CuckooFilter {
     //   num_buckets <<= 1;
     // }
     victim_.used = false;
-    indices = new size_t[num_buckets]();  // () initializes all values to 0
+    indices_ = new size_t[num_buckets]();  // () initializes all values to 0
     // for (int i = 0; i < sizeof(indices); i++) {
     //   std::cout << indices[i] << " ";
     // }
@@ -140,7 +163,7 @@ class CuckooFilter {
   // ~CuckooFilter() { delete table_; }
   ~CuckooFilter() {
     delete table_;
-    delete[] indices;
+    delete[] indices_;
   }
 
   // Inserts an item to the filter at a specific location,
@@ -190,8 +213,8 @@ CuckooFilter<ItemType, bits_per_item, TableType, HashFamily>::PairedInsertImpl(
   uint32_t tag = genTag;
   uint32_t oldtag;
 
-  if (trail.size() > 1)
-    std::cout << "cuckoo trail length: " << trail.size() << "\n";
+  // if (trail.size() > 1)
+  //   std::cout << "cuckoo trail length: " << trail.size() << "\n";
 
   while (!trail.empty()) {
     bool kickout = trail.size() > 1;
@@ -285,6 +308,8 @@ Status CuckooFilter<ItemType, bits_per_item, TableType, HashFamily>::Lookup(
           (i1 == victim_.index || i2 == victim_.index);
 
   if (found || table_->FindTagInBuckets(i1, i2, tag)) {
+    std::cout << "paired CF found " << tag << " in either " << i1 << " or "
+              << i2 << "\n";
     return Ok;
   } else {
     return NotFound;
@@ -308,6 +333,9 @@ Status CuckooFilter<ItemType, bits_per_item, TableType, HashFamily>::Contain(
           (i1 == victim_.index || i2 == victim_.index);
 
   if (found || table_->FindTagInBuckets(i1, i2, tag)) {
+    std::cout << "orig. CF found " << tag << " in either " << i1 << " or " << i2
+              << "\n";
+
     return Ok;
   } else {
     return NotFound;

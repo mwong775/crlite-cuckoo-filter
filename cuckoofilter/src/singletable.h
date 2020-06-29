@@ -189,10 +189,10 @@ class SingleTable {
     } else {
       if (kickout) {
         oldtag = ReadTag(i, j);
-              std::cout << "slot filled -  "
-                   "\n\toccupying tag: "
-                << oldtag << "\n\tpos: " << i << " and " << j
-                << "\n\tinserting tag: " << tag << "\n";
+              // std::cout << "slot filled -  "
+              //      "\n\toccupying tag: "
+              //   << oldtag << "\n\tpos: " << i << " and " << j
+              //   << "\n\tinserting tag: " << tag << "\n";
         WriteTag(i, j, tag);
 
       }
