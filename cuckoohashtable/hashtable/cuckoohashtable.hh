@@ -21,9 +21,12 @@
 #include <type_traits>
 #include <utility>
 #include <vector>
-#include <bits/stdc++.h> 
+#include <bits/stdc++.h>
 
 #include "bucketcontainer.hh"
+
+// #include "../city_hasher.hh"
+
 
 namespace cuckoohashtable
 {
@@ -151,16 +154,27 @@ namespace cuckoohashtable
             buckets_.info();
         }
 
+        // Table hash information
+        void hashInfo() const
+        {
+            const size_type hp = hashpower();
+
+            std::cout << "CuckkooHashtable Info:\n"
+                      << "\t\tHash power: " << hp << "\n"
+                      << "\t\tHash size: " << hashsize(hp) << "\n"
+                      << "\t\tHash mask: " << hashmask(hp) << "\n";
+        }
+
         /**
    * Inserts the key-value pair into the table (returns inserted location).
    */
         template <typename K>
         std::pair<size_type, size_type> insert(K &&key)
         {
-            // std::cout << "inserting " << key << "\n";
 
             // get hashed key
             size_type hv = hashed_key(key);
+            std::cout << "HT inserting " << key << " hv: " << hv << "\n";
             // std::cout << "HT hashed key: " << hv << "\n";
             // find position in table
             auto b = compute_buckets(hv);
@@ -186,15 +200,15 @@ namespace cuckoohashtable
         template <typename K>
         std::stack<std::pair<size_type, size_type>> paired_insert(K &&key)
         {
-            // std::cout << "inserting " << key << "\n";
             std::stack<std::pair<size_type, size_type>> cuckoo_trail;
             // get hashed key
             size_type hv = hashed_key(key);
+            std::cout << "HT inserting " << key << " hv: " << hv << "\n";
             // std::cout << "HT hashed key: " << hv << "\n";
             // find position in table
             auto b = compute_buckets(hv);
             table_position pos = cuckoo_insert_loop(hv, b, key, cuckoo_trail); // finds insert spot, does not actually insert
-            // std::cout << "found spot @ index: " << pos.index << " slot: " << pos.slot << " status: " << pos.status << "\n";
+            std::cout << "HT inserting key " << key << ": " << pos.index << ", " << pos.slot << "\n";// status: " << pos.status << "\n";
             // add to bucket
             if (pos.status == ok)
             {
@@ -204,7 +218,7 @@ namespace cuckoohashtable
             else
             {
                 std::cout << "status NOT ok: " << pos.status << "\n";
-                // assert(pos.status == failure_key_duplicated);
+                assert(pos.status == failure_key_duplicated);
             }
             cuckoo_trail.push(std::make_pair(pos.index, pos.slot));
             return cuckoo_trail;
@@ -235,7 +249,8 @@ namespace cuckoohashtable
             }
             else
             {
-                throw std::out_of_range("key not found in table :(");
+                return 0;
+                // throw std::out_of_range("key not found in table :(");
             }
         }
 
@@ -285,7 +300,7 @@ namespace cuckoohashtable
             // std::cout << "HT hp: " << hp << ", right shift: " << tag << " tag: " << hv << "\n";
 
             // ^ (bitwise XOR), & (bitwise AND)
-            // std:: cout << "HT hashmask(hp): " << hashmask(hp) << "\n";
+            // std::cout << "HT hashmask(hp): " << hashmask(hp) << "\n";
             return (index ^ (tag * 0xc6a4a7935bd1e995)) & hashmask(hp);
         }
 
@@ -308,7 +323,7 @@ namespace cuckoohashtable
             const size_type hp = hashpower();
             const size_type i1 = index_hash(hp, hv);
             const size_type i2 = alt_index(hp, hv, i1);
-            // std::cout << "HT computed buckets " << i1 << " and " << i2 << "\n";
+            std::cout << "HT computed buckets " << i1 << " and " << i2 << "\n";
             return TwoBuckets(i1, i2);
         }
 
