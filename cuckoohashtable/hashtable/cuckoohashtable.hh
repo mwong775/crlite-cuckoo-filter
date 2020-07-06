@@ -177,35 +177,6 @@ namespace cuckoohashtable
             // find position in table
             auto b = compute_buckets(hv);
             table_position pos = cuckoo_insert_loop(hv, b, key); // finds insert spot, does not actually insert
-            // std::cout << "found spot @ index: " << pos.index << " slot: " << pos.slot << " status: " << pos.status << "\n";
-            // add to bucket
-            if (pos.status == ok)
-            {
-                add_to_bucket(pos.index, pos.slot, std::forward<K>(key));
-                num_items_++;
-            }
-            else
-            {
-                std::cout << "status NOT ok: " << pos.status << "\n";
-                // assert(pos.status == failure_key_duplicated);
-            }
-            return std::make_pair(pos.index, pos.slot);
-        }
-
-        /**
-   * Inserts the key-value pair into the table (returns vector of updated locations of keys from running cuckoo).
-   */
-        template <typename K>
-        std::stack<std::pair<size_type, size_type>> paired_insert(K &&key)
-        {
-            std::stack<std::pair<size_type, size_type>> cuckoo_trail;
-            // get hashed key
-            size_type hv = hashed_key(key);
-            // std::cout << "HT inserting " << key << " hv: " << hv << "\n";
-
-            // find position in table
-            auto b = compute_buckets(hv);
-            table_position pos = cuckoo_insert_loop(hv, b, key, cuckoo_trail); // finds insert spot, does not actually insert
             // std::cout << "HT inserting key " << key << ": " << pos.index << ", " << pos.slot << "\n";// status: " << pos.status << "\n";
 
             // add to bucket
@@ -219,11 +190,10 @@ namespace cuckoohashtable
                 std::cout << "status NOT ok: " << pos.status << "\n";
                 assert(pos.status == failure_key_duplicated);
             }
-            cuckoo_trail.push(std::make_pair(pos.index, pos.slot));
-            return cuckoo_trail;
+            return std::make_pair(pos.index, pos.slot);
         }
 
-        /** Searches the table for @p key, and returns the associated value it
+/** Searches the table for @p key, and returns the associated value it
    * finds. @c mapped_type must be @c CopyConstructible.
    *
    * @tparam K type of the key
@@ -274,9 +244,9 @@ namespace cuckoohashtable
 
         // index_hash returns the first possible bucket that the given hashed key
         // could be.
-        static inline size_type index_hash(const size_type hp, const size_type hv)
+        static inline size_type index_hash(const size_type hp, const size_type key) // hv
         {
-            const uint32_t hash = hv >> 32;
+            const uint32_t hash = key >> 32;
             return hash & hashmask(hp);
             // return hv & hashmask(hp);
         }
@@ -286,7 +256,7 @@ namespace cuckoohashtable
         // this function will return the first possible bucket if index is the
         // second possible bucket, so alt_index(ti, partial, alt_index(ti, partial,
         // index_hash(ti, hv))) == index_hash(ti, hv).
-        static inline size_type alt_index(const size_type hp, const size_type hv,
+        static inline size_type alt_index(const size_type hp, const size_type key,
                                           const size_type index)
         {
             // (libcuckoo) ensure tag is nonzero for the multiply. 0xc6a4a7935bd1e995 is the
@@ -295,7 +265,7 @@ namespace cuckoohashtable
             // (DRECHT) ensure tag is nonzero for the multiply
 
             // >> (right shift)
-            const size_t tag = (hv >> hp) + 1;
+            const size_t tag = (key >> hp) + 1;
             // std::cout << "HT hp: " << hp << ", right shift: " << tag << " tag: " << hv << "\n";
 
             // ^ (bitwise XOR), & (bitwise AND)
@@ -317,13 +287,13 @@ namespace cuckoohashtable
         // avoid deadlock. If the two indexes are the same, it just locks one.
         //
         // throws hashpower_changed if it changed after taking the lock.
-        TwoBuckets compute_buckets(const size_type hv) const // size_type, size_type i1, size_type i2
+        TwoBuckets compute_buckets(const size_type key) const // size_type, size_type i1, size_type i2
         {
             const size_type hp = hashpower();
-            const size_type i1 = index_hash(hp, hv);
-            const size_type i2 = alt_index(hp, hv, i1);
+            const size_type i1 = index_hash(hp, key);
+            const size_type i2 = alt_index(hp, key, i1);
 
-            // std::cout << "HT computed buckets " << i1 << " and " << i2 << "\n";
+            std::cout << "HT computed buckets " << i1 << " and " << i2 << "\n";
 
             return TwoBuckets(i1, i2);
         }
@@ -404,13 +374,13 @@ namespace cuckoohashtable
    * load factor of the table is below the threshold
    */
         template <typename K>
-        table_position cuckoo_insert_loop(size_type hv, TwoBuckets &b, K &key, std::stack<std::pair<size_type, size_type>> &trail)
+        table_position cuckoo_insert_loop(size_type hv, TwoBuckets &b, K &key)
         {
             table_position pos;
             while (true)
             {
                 const size_type hp = hashpower();
-                pos = cuckoo_insert(hv, b, key, trail);
+                pos = cuckoo_insert(hv, b, key);
                 switch (pos.status)
                 {
                 case ok:
@@ -455,7 +425,7 @@ namespace cuckoohashtable
         // failure_table_full -- Failed to find an empty slot for the table. Locks
         // are released. No meaningful position is returned.
         template <typename K>
-        table_position cuckoo_insert(const size_type hv, TwoBuckets &b, K &&key, std::stack<std::pair<size_type, size_type>> &trail)
+        table_position cuckoo_insert(const size_type hv, TwoBuckets &b, K &&key)
         {
             int res1, res2; // gets indices
             bucket &b1 = buckets_[b.i1];
@@ -484,7 +454,7 @@ namespace cuckoohashtable
             // We are unlucky, so let's perform cuckoo hashing ~
             size_type insert_bucket = 0;
             size_type insert_slot = 0;
-            cuckoo_status st = run_cuckoo(b, insert_bucket, insert_slot, trail);
+            cuckoo_status st = run_cuckoo(b, insert_bucket, insert_slot);
             if (st == ok)
             {
                 assert(!buckets_[insert_bucket].occupied(insert_slot));
@@ -557,8 +527,7 @@ namespace cuckoohashtable
         // a slot on either of the insert buckets. On success, the bucket and slot
         // that was freed up is stored in insert_bucket and insert_slot. If run_cuckoo
         // returns ok (success), then `b` will be active, otherwise it will not.
-        cuckoo_status run_cuckoo(TwoBuckets &b, size_type &insert_bucket,
-                                 size_type &insert_slot, std::stack<std::pair<size_type, size_type>> &trail)
+        cuckoo_status run_cuckoo(TwoBuckets &b, size_type &insert_bucket, size_type &insert_slot)
         {
             // std::cout << "run_cuckoo\n";
             // cuckoo_search and cuckoo_move
@@ -574,7 +543,7 @@ namespace cuckoohashtable
                     break;
                 }
 
-                if (cuckoopath_move(hp, cuckoo_path, depth, b, trail))
+                if (cuckoopath_move(hp, cuckoo_path, depth, b))
                 {
                     // store freed up bucket and slot
                     insert_bucket = cuckoo_path[0].bucket;
@@ -647,7 +616,7 @@ namespace cuckoohashtable
 
         // cuckoopath_move moves keys along the given cuckoo path in order to make
         // an empty slot in one of the buckets in cuckoo_insert.
-        bool cuckoopath_move(const size_type hp, CuckooRecords &cuckoo_path, size_type depth, TwoBuckets &b, std::stack<std::pair<size_type, size_type>> &trail)
+        bool cuckoopath_move(const size_type hp, CuckooRecords &cuckoo_path, size_type depth, TwoBuckets &b)
         {
             // std::cout << "cuckoopath_move\n";
             if (depth == 0)
@@ -692,7 +661,6 @@ namespace cuckoohashtable
                 buckets_.eraseK(from.bucket, fs);
                 depth--;
                 // std::cout << "depth: " << depth << "\n";
-                trail.push(std::make_pair(to.bucket, to.slot));
             }
             return true;
         }
