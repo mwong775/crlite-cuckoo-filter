@@ -16,11 +16,13 @@ namespace cuckoohashtable
      * manages storage of keys for the table
      * sized by powers of two
      * 
-     * @param Key - type of keys in the table
-     * @param SLOT_PER_BUCKET - number of slots for each bucket in the table
+     * @tparam Key - type of keys in the table
+     * @tparam Allocaator - type of key allocator
+     * @tparam Partial - type of fingerprint/partial keys
+     * @tparam SLOT_PER_BUCKET - number of slots for each bucket in the table
      */
 
-    template <class Key, class Allocator, std::size_t SLOT_PER_BUCKET>
+    template <class Key, class Allocator, class Partial, std::size_t SLOT_PER_BUCKET>
     class bucket_container
     {
     public:
@@ -31,6 +33,7 @@ namespace cuckoohashtable
 
     public:
         using allocator_type = typename traits_::allocator_type;
+        using partial_t = Partial;
         using size_type = typename traits_::size_type;
         using reference = key_type &;
         using const_reference = const key_type &;
@@ -57,6 +60,9 @@ namespace cuckoohashtable
                 return *static_cast<key_type *>(static_cast<void *>(&keys_[ind]));
             }
 
+            partial_t partial(size_type ind) const { return partials_[ind]; }
+            partial_t &partial(size_type ind) { return partials_[ind]; }
+
             bool occupied(size_type ind) const { return occupied_[ind]; }
             bool &occupied(size_type ind) { return occupied_[ind]; }
 
@@ -80,6 +86,7 @@ namespace cuckoohashtable
                                                      alignof(storage_key_type)>::type,
                        SLOT_PER_BUCKET>
                 keys_;
+            std::array<partial_t, SLOT_PER_BUCKET> partials_;
             std::array<bool, SLOT_PER_BUCKET> occupied_;
         };
 
@@ -122,10 +129,11 @@ namespace cuckoohashtable
             std::cout << "BucketContainer status:\n"
                       << "\t\tslots per bucket: " << SLOT_PER_BUCKET << "\n\n";
 
-            // print();
+            print();
+            print("fp");
         }
 
-        void print() const
+        void print(std::string arg = "") const
         {
             for (size_type i = 0; i < size(); ++i)
             {
@@ -135,8 +143,13 @@ namespace cuckoohashtable
                 {
                     if (b.occupied(j))
                     {
-                        std::cout << b.key(j);
-                    } else {
+                        if (arg == "fp")
+                            std::cout << b.partial(j);
+                        else
+                            std::cout << b.key(j);
+                    }
+                    else
+                    {
                         std::cout << " ";
                     }
                     if (j < SLOT_PER_BUCKET - 1)
@@ -149,11 +162,12 @@ namespace cuckoohashtable
         }
 
         // Constructs live data in a bucket
-        template <typename K>                           // , typename... Args
-        void setK(size_type ind, size_type slot, K &&k) // , Args &&... args
+        template <typename K>                                        // , typename... Args
+        void setK(size_type ind, size_type slot, partial_t p, K &&k) // , Args &&... args
         {
             bucket &b = buckets_[ind];
             assert(!b.occupied(slot));
+            b.partial(slot) = p;
             traits_::construct(allocator_, std::addressof(b.storage_key(slot)), std::forward<K>(k));
             // This must occur last, to enforce a strong exception guarantee
             b.occupied(slot) = true;

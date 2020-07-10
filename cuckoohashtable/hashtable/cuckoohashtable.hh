@@ -30,13 +30,16 @@
 namespace cuckoohashtable
 {
 
-    template <class Key, class Hash = std::hash<Key>, class KeyEqual = std::equal_to<Key>,
+    template <class Key, std::size_t bits_per_key, class Hash = std::hash<Key>, class KeyEqual = std::equal_to<Key>,
               class Allocator = std::allocator<Key>, std::size_t SLOT_PER_BUCKET = 4>
     class cuckoo_hashtable
     {
 
     private:
-        using buckets_t = bucket_container<Key, Allocator, SLOT_PER_BUCKET>;
+        // Type of the fingprint/partial key. TODO: make it configurable
+        using partial_t = uint32_t;
+        // Type of the buckets container
+        using buckets_t = bucket_container<Key, Allocator, partial_t, SLOT_PER_BUCKET>;
         size_t num_items_;
 
     public:
@@ -131,7 +134,7 @@ namespace cuckoohashtable
         size_type capacity() const { return bucket_count() * slot_per_bucket(); }
 
         /**
-   * Returns the percentage the table is filled, that is, @ref size() &divide;
+   * Returns the percenfpe the table is filled, that is, @ref size() &divide;
    * @ref capacity().
    *
    * @return load factor of the table
@@ -173,7 +176,8 @@ namespace cuckoohashtable
 
             // get hashed key
             size_type hv = hashed_key(key);
-            std::cout << "HT inserting " << key << " hv: " << hv << "\n";
+            partial_t fp = partial_key(key);
+            std::cout << "HT inserting " << key << " hv: " << hv << " fp: " << fp << "\n";
             // find position in table
             auto b = compute_buckets(hv);
             table_position pos = cuckoo_insert_loop(hv, b, key); // finds insert spot, does not actually insert
@@ -182,7 +186,7 @@ namespace cuckoohashtable
             // add to bucket
             if (pos.status == ok)
             {
-                add_to_bucket(pos.index, pos.slot, std::forward<K>(key));
+                add_to_bucket(pos.index, pos.slot, fp, std::forward<K>(key));
                 num_items_++;
             }
             else
@@ -193,7 +197,7 @@ namespace cuckoohashtable
             return std::make_pair(pos.index, pos.slot);
         }
 
-/** Searches the table for @p key, and returns the associated value it
+        /** Searches the table for @p key, and returns the associated value it
    * finds. @c mapped_type must be @c CopyConstructible.
    *
    * @tparam K type of the key
@@ -201,24 +205,42 @@ namespace cuckoohashtable
    * @return the value associated with the given key
    * @throw std::out_of_range if the key is not found
    */
-        template <typename K>
-        key_type find(const K &key) const
+        template <typename K> bool find(const K &key) const // std::pair<size_type, size_type>
         {
             // get hashed key
-            size_type hv = hashed_key(key);
+            // size_type hv = hashed_key(key);
+            
             // find position in table
-            auto b = compute_buckets(hv);
+            auto b = compute_buckets(key);
+            
             // search in both buckets
             const table_position pos = cuckoo_find(key, b.i1, b.i2);
+            return pos.status == ok;
+            /*
             if (pos.status == ok)
             {
-                return buckets_[pos.index].key(pos.slot);
+                // return buckets_[pos.index].key(pos.slot); // this is dumb, maybe update to bool?
+                return std::make_pair(pos.index, pos.slot);
             }
             else
             {
-                return 0;
+                // return -1;
+                return std::make_pair(-1, -1);
                 // throw std::out_of_range("key not found in table :(");
             }
+            */
+        }
+
+        template <typename K> bool lookup(const K &key) const {
+            // get fingerprint
+            partial_t fp = partial_key(key);
+
+                        // find position in table
+            auto b = compute_buckets(key);
+
+            // search in both buckets
+            const table_position pos = cuckoo_find(key, b.i1, b.i2, fp);
+            return pos.status == ok;
         }
 
     private:
@@ -242,6 +264,18 @@ namespace cuckoohashtable
             return hashsize(hp) - 1;
         }
 
+        static partial_t partial_key(const size_type key)
+        {
+            partial_t fp;
+            // fp = (static_cast<uint32_t>(hv)^static_cast<uint32_t>(hv >>
+            // bits_per_item));
+            fp = key & ((1ULL << bits_per_key) - 1); // maybe replace 1 with the seed?
+            fp += (fp == 0);
+            std::cout << "fp: " << fp << "\n";
+            std::cout << "next fp: " << 1ULL << "\n"; // ULL = unsigned long long
+            return fp;
+        }
+
         // index_hash returns the first possible bucket that the given hashed key
         // could be.
         static inline size_type index_hash(const size_type hp, const size_type key) // hv
@@ -259,18 +293,18 @@ namespace cuckoohashtable
         static inline size_type alt_index(const size_type hp, const size_type key,
                                           const size_type index)
         {
-            // (libcuckoo) ensure tag is nonzero for the multiply. 0xc6a4a7935bd1e995 is the
+            // (libcuckoo) ensure fp is nonzero for the multiply. 0xc6a4a7935bd1e995 is the
             // hash constant from 64-bit MurmurHash2
-            // const size_type nonzero_tag = static_cast<size_type>(partial) + 1;
-            // (DRECHT) ensure tag is nonzero for the multiply
+            // const size_type nonzero_fp = static_cast<size_type>(partial) + 1;
+            // (DRECHT) ensure fp is nonzero for the multiply
 
             // >> (right shift)
-            const size_t tag = (key >> hp) + 1;
-            // std::cout << "HT hp: " << hp << ", right shift: " << tag << " tag: " << hv << "\n";
+            const size_t fp = (key >> hp) + 1;
+            // std::cout << "HT hp: " << hp << ", right shift: " << fp << " fp: " << hv << "\n";
 
             // ^ (bitwise XOR), & (bitwise AND)
             // std::cout << "HT hashmask(hp): " << hashmask(hp) << "\n";
-            return (index ^ (tag * 0xc6a4a7935bd1e995)) & hashmask(hp);
+            return (index ^ (fp * 0xc6a4a7935bd1e995)) & hashmask(hp);
         }
 
         class TwoBuckets
@@ -328,14 +362,26 @@ namespace cuckoohashtable
         // cuckoo_find searches the table for the given key, returning the position
         // of the element found, or a failure status code if the key wasn't found.
         template <typename K>
-        table_position cuckoo_find(const K &key, const size_type i1, const size_type i2) const
+        table_position cuckoo_find(const K &key, const size_type i1, const size_type i2, partial_t fp = -1) const
         {
-            int slot = try_read_from_bucket(buckets_[i1], key); // check each slot in bucket 1
+            int slot;
+            if (fp >= 0) {
+                slot = try_fp_in_bucket(buckets_[i1], fp);
+            }
+            else {
+                slot = try_read_from_bucket(buckets_[i1], key); // check each slot in bucket 1
+            }
             if (slot != -1)
             {
                 return table_position{i1, static_cast<size_type>(slot), ok};
             }
-            slot = try_read_from_bucket(buckets_[i2], key); // check each slot in bucket 2
+
+            if (fp >= 0) {
+                slot = try_fp_in_bucket(buckets_[i2], fp);
+            }
+            else {
+                slot = try_read_from_bucket(buckets_[i2], key); // check each slot in bucket 2
+            }
             if (slot != -1)
             {
                 return table_position{i1, static_cast<size_type>(slot), ok};
@@ -354,6 +400,16 @@ namespace cuckoohashtable
                 {
                     return i;
                 }
+            }
+            return -1;
+        }
+
+        // try_fp_in_bucket will search the bucket for the fingerprint of the given key
+        // and return the index of the slot if found, of -1 if not found.
+        int try_fp_in_bucket(const bucket &b, partial_t p) const {
+            for (int i = 0; i < static_cast<int>(slot_per_bucket()); ++i) {
+                if(p == b.partial(i))
+                    return i;
             }
             return -1;
         }
@@ -471,9 +527,9 @@ namespace cuckoohashtable
         // and value will be move-constructed into the table, so they are not valid
         // for use afterwards.
         template <typename K>                                                         // , typename... Args
-        void add_to_bucket(const size_type bucket_ind, const size_type slot, K &&key) // , Args &&... k
+        void add_to_bucket(const size_type bucket_ind, const size_type slot, const partial_t fp, K &&key) // , Args &&... k
         {
-            buckets_.setK(bucket_ind, slot, std::forward<K>(key)); // , std::forward<Args>(k)...
+            buckets_.setK(bucket_ind, slot, fp, std::forward<K>(key)); // , std::forward<Args>(k)...
         }
 
         // try_find_insert_bucket will search the bucket for the given key, and for
@@ -657,7 +713,7 @@ namespace cuckoohashtable
                     return false;
                 }
 
-                buckets_.setK(to.bucket, ts, std::move(fb.key(fs)));
+                buckets_.setK(to.bucket, ts, fb.partial(fs), std::move(fb.key(fs)));
                 buckets_.eraseK(from.bucket, fs);
                 depth--;
                 // std::cout << "depth: " << depth << "\n";
