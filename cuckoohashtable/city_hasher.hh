@@ -13,7 +13,6 @@ public:
 };
 
 /*! This is a template specialization of CityHasher for
- *  std::string. */
 template <>
 class CityHasher<std::string> {
 public:
@@ -21,3 +20,4 @@ public:
         return CityHash64(k.c_str(), k.size());
     }
 };
+ *  std::string. */
