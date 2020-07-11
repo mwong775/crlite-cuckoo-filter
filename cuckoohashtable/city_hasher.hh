@@ -7,8 +7,9 @@
 template <class Key>
 class CityHasher {
 public:
-    size_t operator()(const Key& k) const {
-        return CityHash64((const char*) &k, sizeof(k));
+    size_t operator()(const Key& k, uint64 seed = 0) const {
+        // return CityHash64((const char*) &k, sizeof(k));
+        return CityHash64WithSeed((const char*) &k, sizeof(k), seed);
     }
 };
 

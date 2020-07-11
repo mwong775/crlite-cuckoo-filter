@@ -126,19 +126,34 @@ namespace cuckoohashtable
 
         void info() const
         {
-            std::cout << "BucketContainer status:\n"
-                      << "\t\tslots per bucket: " << SLOT_PER_BUCKET << "\n\n";
-
-            print();
-            print("fp");
+            // std::cout << "BucketContainer status:\n"
+            //           << "\t\tslots per bucket: " << SLOT_PER_BUCKET << "\n\n";
+            if (size() < 100)
+                print(); // whole items
+            print("fp"); // fingerprints
         }
 
         void print(std::string arg = "") const
         {
-            for (size_type i = 0; i < size(); ++i)
+            int it = size() > 40 ? 10 : size();
+            if (arg == "fp")
+            {
+                if (it == 10)
+                    std::cout << "fp's (first 10):\n";
+                else
+                    std::cout << "fingerprints:\n";
+            }
+            else
+            {
+                if (it == 10)
+                    std::cout << "items (first 10):\n";
+                else
+                    std::cout << "items:\n";
+            }
+            for (size_type i = 0; i < it; ++i)
             {
                 bucket &b = buckets_[i];
-                std::cout << "[ ";
+                std::cout << i << ": [ ";
                 for (size_type j = 0; j < SLOT_PER_BUCKET; ++j)
                 {
                     if (b.occupied(j))
@@ -181,6 +196,15 @@ namespace cuckoohashtable
             assert(b.occupied(slot));
             b.occupied(slot) = false;
             traits_::destroy(allocator_, std::addressof(b.storage_key(slot)));
+        }
+
+        // Adds fingerprint/partial to a bucket
+        void setFP(size_type ind, size_type slot, partial_t p)
+        {
+            bucket &b = buckets_[ind];
+            b.partial(slot) = p;
+            b.occupied(slot) = true;
+            // std::cout << "finished adding rehashed " << p << " to bucket in slot " << slot << " & index " << ind << "\n";
         }
 
         // Destroys all the live data in the buckets. Does not deallocate the bucket memory.
