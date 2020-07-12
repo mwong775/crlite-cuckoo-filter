@@ -272,7 +272,8 @@ namespace cuckoohashtable
         }
 
         size_t num_rehashes() const {
-            return num_lookup_rds_;
+            // last lookup should result in no fp's, so no rehash
+            return num_lookup_rds_ - 1;
         }
 
         template <typename K>
