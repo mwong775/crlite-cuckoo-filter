@@ -58,8 +58,8 @@ int main(int argc, char **argv)
     random_gen(size, r, rd);
     random_gen(size * 100, s, rd);
 
-    fprintf(file, "insert size, lookup size, init size, max load factor\n");
-    fprintf(file, "%lu, %lu, %lu, %.2f\n\n", size, size * 100, init_size, max_lf);
+    fprintf(file, "insert size, lookup size, init size, max percent load factor\n");
+    fprintf(file, "%lu, %lu, %lu, %.1f\n\n", size, size * 100, init_size, max_lf * 100);
 
     // add set R to filter
     for (auto c : r)
@@ -89,6 +89,7 @@ int main(int argc, char **argv)
      * mutually exclusive set S. Buckets yielding false positives are rehashed
      * with an incremented seed until no false positives remain from lookup.
      */
+    fprintf(file, "rehash/lookup round, percent false positives\n");
     while (1)
     {
     size_t total_queries = 0;
@@ -114,12 +115,13 @@ int main(int argc, char **argv)
             }
             total_queries++;
         }
-
-        double fp = (double) false_queries / total_queries;
-        cout << "total false positives: " << false_queries << " out of " << total_queries
-             << ", fp rate: " << 100.0 * fp << "%\n";
-       
         assert(definite_queries == 0); // normal HT should only result in true negatives, no fp's
+
+        double fp = (double) false_queries * 100.0 / total_queries;
+        cout << "total false positives: " << false_queries << " out of " << total_queries
+             << ", fp rate: " << fp << "%\n";
+        
+        fprintf(file, "%lu, %.4f\n", table.num_rehashes(), fp);
 
         if (false_queries > 0)
         {
@@ -134,7 +136,7 @@ int main(int argc, char **argv)
 
     cout << table.info();
     fprintf(file, "slot per bucket, bucket count, capacity, load factor\n");
-    fprintf(file, "%d, %lu, %lu, %.4f\n\n", table.slot_per_bucket(), table.bucket_count(), table.capacity(), table.load_factor());
+    fprintf(file, "%d, %lu, %lu, %.2f\n\n", table.slot_per_bucket(), table.bucket_count(), table.capacity(), table.load_factor() * 100.0);
     // table.bucketInfo();
 
     std::map<int, int> seed_map;
@@ -146,13 +148,12 @@ int main(int argc, char **argv)
     }
 
     double avg_rehashes = (double) total_rehash / table.bucket_count();
-    double rehash_percent = (double) rehashBSet.size() / table.bucket_count();
-    fprintf(file, "\ntotal rehashes, max rehash, average per bucket, ratio rehashed buckets\n");
-    fprintf(file, "%d, %lu, %.4f, %.4f\n\n", total_rehash, table.num_rehashes(), avg_rehashes, rehash_percent);
+    double rehash_percent = (double) rehashBSet.size() * 100.0 / table.bucket_count();
+    fprintf(file, "\ntotal rehashes, max rehash, average per bucket, percent rehashed buckets\n");
+    fprintf(file, "%d, %lu, %.4f, %.3f\n\n", total_rehash, table.num_rehashes(), avg_rehashes, rehash_percent);
     /*    
 */
 
-    fprintf(file, "\n");
     fclose(file);
 
     return 0;
