@@ -1,0 +1,44 @@
+insert size, lookup size, init size, max percent load factor
+240000, 24000000, 252631, 95.0
+
+rehash/lookup round, false positives, percent fp's
+0, 42873, 0.1786375
+1, 21122, 0.0880083
+2, 10711, 0.0446292
+3, 5225, 0.0217708
+4, 2670, 0.0111250
+5, 1357, 0.0056542
+6, 682, 0.0028417
+7, 331, 0.0013792
+8, 164, 0.0006833
+9, 84, 0.0003500
+10, 40, 0.0001667
+11, 19, 0.0000792
+12, 5, 0.0000208
+13, 4, 0.0000167
+14, 1, 0.0000042
+15, 0, 0.0000000
+slot per bucket, bucket count, capacity, load factor
+4, 65536, 262144, 91.55
+
+rehashes per bucket, count
+0, 34421
+1, 15788
+2, 7656
+3, 3897
+4, 1833
+5, 945
+6, 499
+7, 264
+8, 122
+9, 52
+10, 33
+11, 12
+12, 9
+13, 2
+14, 2
+15, 1
+
+total rehashes, max rehash, average per bucket, percent rehashed buckets
+61759, 15, 0.9424, 47.478
+
