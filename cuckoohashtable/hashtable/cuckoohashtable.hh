@@ -145,14 +145,16 @@ namespace cuckoohashtable
         }
 
         // Table status & information to print
-        void info() const
+        std::string info() const
         {
-            std::cout << "CuckooHashtable Status:\n"
-                      << "\t\tSlot per bucket: " << slot_per_bucket() << "\n"
-                      << "\t\tBucket count: " << bucket_count() << "\n"
-                      << "\t\tCapacity: " << capacity() << "\n\n"
-                      << "\t\tKeys stored: " << size() << "\n"
-                      << "\t\tLoad factor: " << load_factor() << "\n";
+            std::stringstream ss;
+            ss << "CuckooHashtable Status:\n"
+               << "\t\tSlot per bucket: " << slot_per_bucket() << "\n"
+               << "\t\tBucket count: " << bucket_count() << "\n"
+               << "\t\tCapacity: " << capacity() << "\n\n"
+               << "\t\tKeys stored: " << size() << "\n"
+               << "\t\tLoad factor: " << load_factor() << "\n";
+            return ss.str();
         }
 
         void bucketInfo() const
@@ -161,10 +163,9 @@ namespace cuckoohashtable
         }
 
         // bucket seeds info
-        void seedInfo() const
+        void seedInfo(std::map<int, int> &seed_map) const
         {
             // can use unordered map to track quantity of each rehash count (e.g. lots of 1's, less 2's, etc.)
-            std::map<int, int> seed_map;
             // std::cout << "Bucket Seed Info:\n";
             for (size_t s = 0; s < bucket_count(); s++)
             {
@@ -270,8 +271,12 @@ namespace cuckoohashtable
             num_lookup_rds_++;
         }
 
+        size_t num_rehashes() const {
+            return num_lookup_rds_;
+        }
+
         template <typename K>
-        int lookup(const K &key) const
+        size_type lookup(const K &key) const
         {
             // find position in table
             auto b = compute_buckets(key);
@@ -294,7 +299,8 @@ namespace cuckoohashtable
                     seed++;
                     // std::cout << "fp on key: " << key << " hv: " << hv << " fp: " << fp << " at pos " << pos.index << ", " << pos.slot << ", seed to " << seed << "\n";
                 }
-                return fp1;
+                // return fp1;
+                return pos1.index;
             }
 
             if (pos2.status == ok)
@@ -305,26 +311,26 @@ namespace cuckoohashtable
                     seed++;
                     // std::cout << "fp on key: " << key << " hv: " << hv << " fp: " << fp << " at pos " << pos.index << ", " << pos.slot << ", seed to " << seed << "\n";
                 }
-                return fp2;
+                // return fp2;
+                return pos2.index;
             }
             else
-                return 0;
+                return -1;
         }
 
-        void rehash_buckets()
+        int rehash_buckets()
         {
+            int b_count = 0;
             for (int i = 0; i < seeds_.size(); i++)
             {
                 if (seeds_.at(i) == num_lookup_rds_)
                 {
+                    b_count++;
                     bucket &b = buckets_[i];
                     for (int j = 0; j < static_cast<int>(slot_per_bucket()); ++j)
                     {
                         // rehash fp's at bucket index i
                         const size_type key = b.key(j);
-                        // size_type old_hv = hashed_key(key);
-                        // partial_t old_fp = partial_key(old_hv);
-                        // std::cout << "old hv: " << old_hv << " fp: " << old_fp << "\n";
                         size_type hv = hashed_key(key, seeds_.at(i));
                         partial_t fp = partial_key(hv);
                         // std::cout << "new hv: " << hv << " fp: " << fp << "\n";
@@ -333,6 +339,7 @@ namespace cuckoohashtable
                     }
                 }
             }
+            return b_count;
         }
 
     private:

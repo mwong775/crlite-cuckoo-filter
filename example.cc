@@ -16,122 +16,144 @@ void random_gen(int n, vector<uint64_t> &store, mt19937 &rd)
         store[i] = (uint64_t(rd()) << 32) + rd();
 }
 
+    /**
+     * CityHash usage:
+     * init/declare: CityHasher<int> ch;
+     * cout << key << " , cityhash: " << ch.operator()(key, seed);
+    */
+
 int main(int argc, char **argv)
 {
+    int seed = 1;
+    mt19937 rd(seed);
+
+    FILE *file = fopen("cuckoo_rehashing_fp.csv", "a"); // to print all stats to a file
+    if (file == NULL)
+    {
+        perror("Couldn't open file\n");
+        return 1;
+    }
+
     if (argc <= 1)
     {
         cout << "enter number of items to insert\n";
         return 1;
     }
 
-    int seed = 1;
-    mt19937 rd(seed);
-
-    typedef uint64_t KeyType;
-    int size = atoi(argv[1]);    // 240000 for ~91% load factor
-    int init_size = size / 0.95; // max load factor of 95%
+    uint64_t size = atoi(argv[1]); // 240000 for ~91% load factor
+    // max load factor of 95%
+    double max_lf = 0.95;
+    uint64_t init_size = size / max_lf;
     cout << "init size: " << init_size << "\n";
 
-    cuckoohashtable::cuckoo_hashtable<KeyType, 12, CityHasher<int>> table(init_size);
+    typedef uint64_t KeyType;
+    cuckoohashtable::cuckoo_hashtable<KeyType, 12, CityHasher<KeyType>> table(init_size);
 
     vector<KeyType> r;
     vector<KeyType> s;
 
-    vector<KeyType> fp;
+    // vector<KeyType> fp;
 
     // 64-bit random numbers to insert and lookup -> lookup_size = insert_size * 100
     random_gen(size, r, rd);
     random_gen(size * 100, s, rd);
 
-    // CityHasher<int> ch;
+    fprintf(file, "insert size, lookup size, init size, max load factor\n");
+    fprintf(file, "%lu, %lu, %lu, %.2f\n\n", size, size * 100, init_size, max_lf);
 
     // add set R to filter
-    // cout << "R INSERT\n";
-    // for (size_t i = 0; i < r.size(); i++)
     for (auto c : r)
     {
-        // auto c = r.at(i);
-        // cout << c << " , cityhash: " << ch.operator()(c, 0);
         table.insert(c);
     }
 
     // check for false negatives with set R
-
-    // cout << "R LOOKUP (FN)\n";
     size_t false_negs = 0;
     for (auto c : r)
     {
-        if (!table.lookup(c))
+        if (table.lookup(c) < 0)
         {
-            // cout << "fn tag: " << l << "\n";
             false_negs++;
         }
     }
-    // cout << "total false negatives: " << false_negs << "\n";
     assert(false_negs == 0);
 
     // lookup set S and count false positives
 
-    // cout << "S LOOKUP (FP)\n";
-    size_t total_queries = 0;
-    size_t false_queries = size;
-    size_t definite_queries = 0;
-    // size_t false_comp = 0;
+    // track buckets needing rehash using a set
+    std::unordered_set<KeyType> rehashBSet;
+    int total_rehash = 0;
 
-    while (false_queries)
+    /**
+     * We check for false positives by looking up fingerprints using
+     * mutually exclusive set S. Buckets yielding false positives are rehashed
+     * with an incremented seed until no false positives remain from lookup.
+     */
+    while (1)
     {
-        false_queries = 0;
-        total_queries = 0;
-        definite_queries = 0;
-        fp.clear();
+    size_t total_queries = 0;
+    size_t false_queries = 0;
+    size_t definite_queries = 0;
+        // fp.clear();
+
         table.start_lookup();
-        // table.bucketInfo();
-        for (size_t i = 0; i < s.size(); i++)
-        // for (auto l : s)
+        for (auto l : s)
         {
-            auto l = s.at(i);
-            int fingerprint = table.lookup(l);
-            if (fingerprint)
+            int index = table.lookup(l);
+            if (index >= 0)
             {
-                // cout << "fp lup: " << l << "\n";
-                fp.push_back(fingerprint);
+                // fp.push_back(fingerprint);
                 false_queries++;
+                if(rehashBSet.find(index) == rehashBSet.end()) {
+                    rehashBSet.insert(index);
+                }
             }
             if (table.find(l))
             {
                 definite_queries++;
             }
-            // if (cf.Contain(l) == cuckoofilter::Ok)
-            // {
-            //     false_comp++;
-            // }
             total_queries++;
         }
 
-        // Output the measured false positive rate
-        // cout << "fp's: [";
-        // for (auto f : fp)
-        //     cout << f << " ";
-        // cout << "]";
-
+        double fp = (double) false_queries / total_queries;
         cout << "total false positives: " << false_queries << " out of " << total_queries
-             << ", fp rate: " << 100.0 * false_queries / total_queries << "%\n";
-        assert(definite_queries / total_queries == 0);
-
-        // cout << "Original CF: " << false_comp << " out of " << total_queries << ", fp rate: "
-        //      << 100.0 * false_comp / total_queries << "%\n";
+             << ", fp rate: " << 100.0 * fp << "%\n";
+       
+        assert(definite_queries == 0); // normal HT should only result in true negatives, no fp's
 
         if (false_queries > 0)
         {
-            table.rehash_buckets();
+            total_rehash += table.rehash_buckets();
         }
+        else
+        {
+            break;
+        }
+        
     }
 
-    table.info();
+    cout << table.info();
+    fprintf(file, "slot per bucket, bucket count, capacity, load factor\n");
+    fprintf(file, "%d, %lu, %lu, %.4f\n\n", table.slot_per_bucket(), table.bucket_count(), table.capacity(), table.load_factor());
     // table.bucketInfo();
-    table.seedInfo();
-    /*    
 
+    std::map<int, int> seed_map;
+    table.seedInfo(seed_map);
+    int max_rehash = 0;
+    fprintf(file, "rehashes per bucket, count\n");
+    for (auto &k : seed_map) {
+        fprintf(file, "%d, %d\n", k.first, k.second);
+    }
+
+    double avg_rehashes = (double) total_rehash / table.bucket_count();
+    double rehash_percent = (double) rehashBSet.size() / table.bucket_count();
+    fprintf(file, "\ntotal rehashes, max rehash, average per bucket, ratio rehashed buckets\n");
+    fprintf(file, "%d, %lu, %.4f, %.4f\n\n", total_rehash, table.num_rehashes(), avg_rehashes, rehash_percent);
+    /*    
 */
+
+    fprintf(file, "\n");
+    fclose(file);
+
     return 0;
 }
