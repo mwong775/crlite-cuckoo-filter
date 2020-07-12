@@ -87,7 +87,7 @@ int main(int argc, char **argv)
      * mutually exclusive set S. Buckets yielding false positives are rehashed
      * with an incremented seed until no false positives remain from lookup.
      */
-    fprintf(file, "rehash/lookup round, percent false positives\n");
+    fprintf(file, "rehash/lookup round, false positives, percent fp's\n");
     while (1)
     {
         size_t total_queries = 0;
@@ -118,7 +118,7 @@ int main(int argc, char **argv)
         cout << "total false positives: " << false_queries << " out of " << total_queries
              << ", fp rate: " << fp << "%\n";
 
-        fprintf(file, "%lu, %.4f\n", table.num_rehashes(), fp);
+        fprintf(file, "%lu, %lu, %.6f\n", table.num_rehashes(), false_queries, fp);
 
         if (false_queries > 0)
         {
