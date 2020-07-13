@@ -66,7 +66,7 @@ namespace cuckoohashtable
      */
         cuckoo_hashtable(size_type n = (1U << 16) * 4, const Hash &hf = Hash(),
                          const KeyEqual &equal = KeyEqual(), const Allocator &alloc = Allocator()) : num_items_(0), hash_fn_(hf), eq_fn_(equal),
-                                                                                                     buckets_(reserve_calc(n), alloc), seeds_(bucket_count()) {}
+                                                                                                     buckets_(reserve_calc(n), alloc), seeds_(bucket_count()), num_lookup_rds_(0) {}
 
         /**
      * Copy constructor
@@ -204,7 +204,6 @@ namespace cuckoohashtable
         template <typename K>
         std::pair<size_type, size_type> insert(K &&key)
         {
-
             // get hashed key
             size_type hv = hashed_key(key);
             partial_t fp = partial_key(hv);
@@ -268,9 +267,10 @@ namespace cuckoohashtable
         void start_lookup() const
         {
             num_lookup_rds_++;
+            // std::cout << "starting lookup round " << num_lookup_rds_ << "\n";
         }
 
-        size_t num_rehashes() const {
+        size_t num_rehashes() {
             // last lookup should result in no fp's, so no rehash
             return num_lookup_rds_ - 1;
         }
@@ -333,13 +333,21 @@ namespace cuckoohashtable
                         const size_type key = b.key(j);
                         size_type hv = hashed_key(key, seeds_.at(i));
                         partial_t fp = partial_key(hv);
-                        // std::cout << "new hv: " << hv << " fp: " << fp << "\n";
+                        // std::cout << "new hv: " << hv << " fp: " << fp << " lup rd: " << num_lookup_rds_ <<  "\n";
                         if (b.occupied(j))
                             fp_to_bucket(i, j, fp);
                     }
                 }
             }
             return b_count;
+        }
+
+        std::vector<int> get_seeds() { // std::vector<int> &seeds
+            return seeds_;
+            // seeds.resize(seeds_.size());
+            // for(int i = 0; i < seeds_.size(); i++) {
+            //     seeds[i] = seeds_.at(i);
+            // }
         }
 
     private:
