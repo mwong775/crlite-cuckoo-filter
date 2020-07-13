@@ -1,7 +1,7 @@
 insert size, lookup size, init size, max percent load factor
 300000, 30000000, 315789, 95.0
 
-rehash/lookup round, false positives, percent fp's
+lookup round, false positives, percent fp's
 1, 33436, 0.111453
 2, 9443, 0.031477
 3, 2992, 0.009973
@@ -36,7 +36,7 @@ total rehashes, max rehash, average per bucket, percent rehashed buckets
 insert size, lookup size, init size, max percent load factor
 24, 2400, 25, 95.0
 
-rehash/lookup round, false positives, percent fp's
+lookup round, false positives, percent fp's
 1, 8, 0.333333
 2, 1, 0.041667
 3, 0, 0.000000
@@ -54,7 +54,7 @@ total rehashes, max rehash, average per bucket, percent rehashed buckets
 insert size, lookup size, init size, max percent load factor
 240, 24000, 252, 95.0
 
-rehash/lookup round, false positives, percent fp's
+lookup round, false positives, percent fp's
 1, 37, 0.154167
 2, 20, 0.083333
 3, 14, 0.058333
@@ -80,7 +80,7 @@ total rehashes, max rehash, average per bucket, percent rehashed buckets
 insert size, lookup size, init size, max percent load factor
 2400, 240000, 2526, 95.0
 
-rehash/lookup round, false positives, percent fp's
+lookup round, false positives, percent fp's
 1, 287, 0.119583
 2, 72, 0.030000
 3, 19, 0.007917
@@ -104,7 +104,7 @@ total rehashes, max rehash, average per bucket, percent rehashed buckets
 insert size, lookup size, init size, max percent load factor
 24000, 2400000, 25263, 95.0
 
-rehash/lookup round, false positives, percent fp's
+lookup round, false positives, percent fp's
 1, 3473, 0.144708
 2, 1232, 0.051333
 3, 472, 0.019667
@@ -139,7 +139,7 @@ total rehashes, max rehash, average per bucket, percent rehashed buckets
 insert size, lookup size, init size, max percent load factor
 240000, 24000000, 252631, 95.0
 
-rehash/lookup round, false positives, percent fp's
+lookup round, false positives, percent fp's
 1, 42873, 0.178638
 2, 21122, 0.088008
 3, 10711, 0.044629
@@ -183,7 +183,7 @@ total rehashes, max rehash, average per bucket, percent rehashed buckets
 insert size, lookup size, init size, max percent load factor
 2400000, 240000000, 2526315, 95.0
 
-rehash/lookup round, false positives, percent fp's
+lookup round, false positives, percent fp's
 1, 267396, 0.111415
 2, 74805, 0.031169
 3, 22742, 0.009476
