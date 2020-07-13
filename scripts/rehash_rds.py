@@ -19,30 +19,28 @@ with open('../csv/rehash_sizes.csv') as file:
         rehash_rds.append(int(row['rehash rounds']))
         # rehash_total.append(int(row['total rehash']))
         # bucket_avg.append(float(row['average per bucket']))
-        percent_rehash.append(float(row['percent rehashed buckets']))
-        lf.append(float(row['load factor']))
+        # percent_rehash.append(float(row['percent rehashed buckets']))
+        # lf.append(float(row['load factor']))
     
-print(ins_size, bucket_avg, percent_rehash, lf)
+print(ins_size, rehash_rds)
 
 x = np.arange(len(ins_size)) # the label locations
-width = 0.35 # the width of the bars
 
 fig, fp1 = plt.subplots()
-fig.set_size_inches(8, 5.5)
-fp1.bar(x - width/2, percent_rehash, width, label='Percent Rehashed Buckets')
-# fp1.bar(x, bucket_avg, width, label='Average Per Bucket')
-fp1.bar(x + width/2, lf, width, label='Load Factor') # x + width
+width = 0.35
+fig.set_size_inches(7, 5.5)
+fp1.bar(x, rehash_rds, width, label='Number of Rehash Rounds')
 
-fp1.yaxis.set_major_formatter(mtick.PercentFormatter())
+# fp1.yaxis.set_major_formatter(mtick.PercentFormatter())
 fp1.legend()
 plt.xticks(x, ins_size)
 plt.xlabel("Insertion Size")
-plt.ylabel("Percentage")
-plt.title("Bucket Rehash Distribution Over Size")
+plt.ylabel("Number of Rehash Rounds")
+plt.title("Max Rehash Rounds By Size")
 
-plt.grid(True)
+# plt.grid(True)
 plt.show()
-fig.savefig("../figures/rehash_sizes.png")
+fig.savefig("../figures/rehash_rds.png")
 
 
 exit()
