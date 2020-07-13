@@ -16,14 +16,7 @@ void random_gen(int n, vector<uint64_t> &store, mt19937 &rd)
         store[i] = (uint64_t(rd()) << 32) + rd();
 }
 
-/**
-     * CityHash usage:
-     * init/declare: CityHasher<int> ch;
-     * cout << key << " , cityhash: " << ch.operator()(key, seed);
-    */
-
-int main(int argc, char **argv)
-{
+int hashtable_ops(int argc, char **argv) {
     int seed = 1;
     mt19937 rd(seed);
 
@@ -114,11 +107,11 @@ int main(int argc, char **argv)
         }
         assert(definite_queries == 0); // normal HT should only result in true negatives, no fp's
 
-        double fp = (double)false_queries * 100.0 / total_queries;
+        double fp = (double) false_queries * 100.0 / total_queries;
         cout << "total false positives: " << false_queries << " out of " << total_queries
              << ", fp rate: " << fp << "%\n";
 
-        fprintf(file, "%lu, %lu, %.6f\n", table.num_rehashes(), false_queries, fp);
+        fprintf(file, "%lu, %lu, %.6f\n", table.num_rehashes() + 1, false_queries, fp);
 
         if (false_queries > 0)
         {
@@ -150,6 +143,17 @@ int main(int argc, char **argv)
     fprintf(file, "%d, %lu, %.4f, %.3f\n\n", total_rehash, table.num_rehashes(), avg_rehashes, rehash_percent);
 
     fclose(file);
+}
+
+/**
+     * CityHash usage:
+     * init/declare: CityHasher<int> ch;
+     * cout << key << " , cityhash: " << ch.operator()(key, seed);
+    */
+
+int main(int argc, char **argv)
+{
+    hashtable_ops(argc, argv);
 
     return 0;
 }

@@ -167,9 +167,10 @@ namespace cuckoohashtable
         {
             // can use unordered map to track quantity of each rehash count (e.g. lots of 1's, less 2's, etc.)
             // std::cout << "Bucket Seed Info:\n";
-            for (size_t s = 0; s < bucket_count(); s++)
+            for (size_t i = 0; i < bucket_count(); i++)
             {
-                seed_map[seeds_.at(s)]++;
+                // printSeed(i);
+                seed_map[seeds_.at(i)]++;
             }
             std::cout << "rehashing seed map:\n";
             for (auto &k : seed_map)
@@ -182,10 +183,8 @@ namespace cuckoohashtable
 
         void printSeed(const size_t i) const
         {
-            int it = bucket_count() > 40 ? 15 : seeds_.size();
-            if (seeds_.at(i) == 0 && it == 15)
-                return;
-            std::cout << i << ": [ " << seeds_.at(i) << " ]\n";
+            if (seeds_.at(i) > 5)
+                std::cout << i << ": [ " << seeds_.at(i) << " ]\n";
         }
 
         // Table hash information
