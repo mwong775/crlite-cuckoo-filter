@@ -39,13 +39,14 @@ print(percent_cumu)
 # fig = plt.figure()
 fig, ax = plt.subplots()
 # rehash.pop(0)
-plt.bar(rehash, percent_cumu, color='y')
-plt.bar(rehash, percent_count)
+plt.bar(rehash, percent_cumu, color='y', label='cumulative')
+plt.bar(rehash, percent_count, label='specific count')
 plt.plot(loc = "upper right")
 plt.xlabel("Rehash Count")
 plt.ylabel("Frequency out of Total Buckets")
 plt.title("Bucket Rehashing Frequency Distribution")
 ax.yaxis.set_major_formatter(mtick.PercentFormatter())
+ax.legend()
 
 
 """
