@@ -16,41 +16,11 @@ void random_gen(int n, vector<uint64_t> &store, mt19937 &rd)
         store[i] = (uint64_t(rd()) << 32) + rd();
 }
 
-int hashtable_ops(int argc, char **argv) {
-    int seed = 1;
-    mt19937 rd(seed);
+template <typename KeyType>
+vector<int> hashtable_ops(const uint64_t &init_size, vector<KeyType> &r, vector<KeyType> &s, FILE *file)
+{
 
-    FILE *file = fopen("cuckoo_rehashing_fp.csv", "a"); // to print all stats to a file
-    if (file == NULL)
-    {
-        perror("Couldn't open file\n");
-        return 1;
-    }
-
-    if (argc <= 1)
-    {
-        cout << "enter number of items to insert\n";
-        return 1;
-    }
-
-    uint64_t size = atoi(argv[1]); // 240000 for ~91% load factor
-    // max load factor of 95%
-    double max_lf = 0.95;
-    uint64_t init_size = size / max_lf;
-    cout << "init size: " << init_size << "\n";
-
-    typedef uint64_t KeyType;
     cuckoohashtable::cuckoo_hashtable<KeyType, 12, CityHasher<KeyType>> table(init_size);
-
-    vector<KeyType> r;
-    vector<KeyType> s;
-
-    // 64-bit random numbers to insert and lookup -> lookup_size = insert_size * 100
-    random_gen(size, r, rd);
-    random_gen(size * 100, s, rd);
-
-    fprintf(file, "insert size, lookup size, init size, max percent load factor\n");
-    fprintf(file, "%lu, %lu, %lu, %.1f\n\n", size, size * 100, init_size, max_lf * 100);
 
     // add set R to filter
     for (auto c : r)
@@ -59,15 +29,16 @@ int hashtable_ops(int argc, char **argv) {
     }
 
     // check for false negatives with set R
-    size_t false_negs = 0;
+    // size_t false_negs = 0;
     for (auto c : r)
     {
-        if (table.lookup(c) < 0)
-        {
-            false_negs++;
-        }
+        assert(table.lookup(c) >= 0);
+        // if (table.lookup(c) < 0)
+        // {
+        //     false_negs++;
+        // }
     }
-    assert(false_negs == 0);
+    // assert(false_negs == 0);
 
     // lookup set S and count false positives
 
@@ -80,7 +51,7 @@ int hashtable_ops(int argc, char **argv) {
      * mutually exclusive set S. Buckets yielding false positives are rehashed
      * with an incremented seed until no false positives remain from lookup.
      */
-    fprintf(file, "rehash/lookup round, false positives, percent fp's\n");
+    fprintf(file, "lookup round, false positives, percent fp's\n");
     while (1)
     {
         size_t total_queries = 0;
@@ -107,7 +78,7 @@ int hashtable_ops(int argc, char **argv) {
         }
         assert(definite_queries == 0); // normal HT should only result in true negatives, no fp's
 
-        double fp = (double) false_queries * 100.0 / total_queries;
+        double fp = (double)false_queries * 100.0 / total_queries;
         cout << "total false positives: " << false_queries << " out of " << total_queries
              << ", fp rate: " << fp << "%\n";
 
@@ -124,13 +95,12 @@ int hashtable_ops(int argc, char **argv) {
     }
 
     cout << table.info();
-    fprintf(file, "slot per bucket, bucket count, capacity, load factor\n");
+    fprintf(file, "\nslot per bucket, bucket count, capacity, load factor\n");
     fprintf(file, "%d, %lu, %lu, %.2f\n\n", table.slot_per_bucket(), table.bucket_count(), table.capacity(), table.load_factor() * 100.0);
     // table.bucketInfo();
 
     std::map<int, int> seed_map;
     table.seedInfo(seed_map);
-    int max_rehash = 0;
     fprintf(file, "rehashes per bucket, count\n");
     for (auto &k : seed_map)
     {
@@ -143,6 +113,8 @@ int hashtable_ops(int argc, char **argv) {
     fprintf(file, "%d, %lu, %.4f, %.3f\n\n", total_rehash, table.num_rehashes(), avg_rehashes, rehash_percent);
 
     fclose(file);
+
+    return table.get_seeds();
 }
 
 /**
@@ -153,7 +125,42 @@ int hashtable_ops(int argc, char **argv) {
 
 int main(int argc, char **argv)
 {
-    hashtable_ops(argc, argv);
+    if (argc <= 1)
+    {
+        cout << "Enter number of items to insert!\n";
+        return {};
+    }
+
+    typedef uint64_t KeyType;
+    vector<KeyType> r;
+    vector<KeyType> s;
+
+    uint64_t size = atoi(argv[1]); // 240000 for ~91% load factor
+
+    int seed = 1;
+    mt19937 rd(seed);
+
+    // 64-bit random numbers to insert and lookup -> lookup_size = insert_size * 100
+    random_gen(size, r, rd);
+    random_gen(size * 100, s, rd);
+
+    // max load factor of 95%
+    double max_lf = 0.95;
+    uint64_t init_size = size / max_lf;
+    cout << "init size: " << init_size << "\n";
+
+    FILE *file = fopen("cuckoo_pair.csv", "a"); // to print all stats to a file
+    if (file == NULL)
+    {
+        perror("Couldn't open file\n");
+        return {};
+    }
+
+    fprintf(file, "insert size, lookup size, init size, max percent load factor\n");
+    fprintf(file, "%lu, %lu, %lu, %.1f\n\n", size, size * 100, init_size, max_lf * 100);
+
+    cuckoofilter::CuckooFilter<size_t, 12> filter(init_size);
+    hashtable_ops(init_size, r, s, file);
 
     return 0;
 }
