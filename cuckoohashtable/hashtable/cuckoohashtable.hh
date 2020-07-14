@@ -350,6 +350,17 @@ namespace cuckoohashtable
             // }
         }
 
+        template <typename key_type>
+        void export_table(std::vector<std::vector<key_type>> &fp_table) {
+            for(int i = 0; i < bucket_count(); i++) {
+                std::vector<key_type> fp_bucket;
+                for(int j = 0; j < static_cast<int>(slot_per_bucket()); j++) {
+                    fp_bucket.push_back(buckets_[i].partial(j));
+                }
+                fp_table.push_back(fp_bucket);
+            }
+        }
+
     private:
         template <typename K>
         size_type hashed_key(const K &key, int seed = 0) const
@@ -408,7 +419,7 @@ namespace cuckoohashtable
 
             // >> (right shift)
             const size_t fp = (key >> hp) + 1;
-            // std::cout << "HT hp: " << hp << ", right shift: " << fp << " fp: " << hv << "\n";
+            // std::cout << "HT hp: " << hp << ", right shift: " << fp << "key: " << key << "\n";
 
             // ^ (bitwise XOR), & (bitwise AND)
             // std::cout << "HT hashmask(hp): " << hashmask(hp) << "\n";
