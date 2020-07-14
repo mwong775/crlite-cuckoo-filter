@@ -65,6 +65,6 @@ plt.subplots_adjust(left=0.2, bottom=0.2)
 
 plt.grid(True)
 plt.show()
-fig.savefig("../figures/cert_fp_lookup.png")
+# fig.savefig("../figures/cert_fp_lookup.png")
 
 exit()
