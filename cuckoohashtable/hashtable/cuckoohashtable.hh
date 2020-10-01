@@ -24,9 +24,6 @@
 #include <bits/stdc++.h>
 
 #include "bucketcontainer.hh"
-
-// #include "../city_hasher.hh"
-
 namespace cuckoohashtable
 {
 
@@ -66,7 +63,7 @@ namespace cuckoohashtable
      */
         cuckoo_hashtable(size_type n = (1U << 16) * 4, const Hash &hf = Hash(),
                          const KeyEqual &equal = KeyEqual(), const Allocator &alloc = Allocator()) : num_items_(0), hash_fn_(hf), eq_fn_(equal),
-                                                                                                     buckets_(reserve_calc(n), alloc), seeds_(bucket_count()), num_lookup_rds_(0) {}
+                                                                                                     buckets_(reserve_calc(n), new_size_calc(n), alloc), seeds_(bucket_count()), num_lookup_rds_(0) {}
 
         /**
      * Copy constructor
@@ -208,12 +205,12 @@ namespace cuckoohashtable
             size_type hv = hashed_key(key);
             partial_t fp = partial_key(hv);
 
-            // std::cout << "HT inserting " << key << " hv: " << hv << " fp: " << fp << "\n";
+            std::cout << "HT inserting " << key << " hv: " << hv << " fp: " << fp << "\n";
 
             // find position in table
             auto b = compute_buckets(key);
             table_position pos = cuckoo_insert_loop(b, key); // finds insert spot, does not actually insert
-            // std::cout << "HT inserting key " << key << ": " << pos.index << ", " << pos.slot << "\n";// status: " << pos.status << "\n";
+            std::cout << "HT inserting key " << key << ": " << pos.index << ", " << pos.slot << "\n";// status: " << pos.status << "\n";
 
             // add to bucket
             if (pos.status == ok)
@@ -422,7 +419,7 @@ namespace cuckoohashtable
             // std::cout << "HT hp: " << hp << ", right shift: " << fp << "key: " << key << "\n";
 
             // ^ (bitwise XOR), & (bitwise AND)
-            // std::cout << "HT hashmask(hp): " << hashmask(hp) << "\n";
+            std::cout << "HT hashmask(hp): " << hashmask(hp) << "\n";
             return (index ^ (fp * 0xc6a4a7935bd1e995)) & hashmask(hp);
         }
 
@@ -446,7 +443,7 @@ namespace cuckoohashtable
             const size_type i1 = index_hash(hp, key);
             const size_type i2 = alt_index(hp, key, i1);
 
-            // std::cout << "HT computed buckets " << i1 << " and " << i2 << "\n";
+            std::cout << "HT computed buckets " << i1 << " and " << i2 << "\n";
 
             return TwoBuckets(i1, i2);
         }
@@ -569,10 +566,11 @@ namespace cuckoohashtable
         template <typename K>
         table_position cuckoo_insert_loop(TwoBuckets &b, K &key)
         {
+            cout << "ins loop\n";
             table_position pos;
             while (true)
             {
-                const size_type hp = hashpower();
+                // const size_type hp = hashpower();
                 pos = cuckoo_insert(b, key);
                 switch (pos.status)
                 {
@@ -620,16 +618,17 @@ namespace cuckoohashtable
         template <typename K>
         table_position cuckoo_insert(TwoBuckets &b, K &&key)
         {
+            cout << "cuckoo ins\n";
             int res1, res2; // gets indices
             bucket &b1 = buckets_[b.i1];
-            // std::cout << "b1: " << b.i1 << "\n";
+            std::cout << "b1: " << b.i1 << "\n";
             if (!try_find_insert_bucket(b1, res1, key))
             {
                 return table_position{b.i1, static_cast<size_type>(res1),
                                       failure_key_duplicated};
             }
             bucket &b2 = buckets_[b.i2];
-            // std::cout << "b2: " << b.i2 << "\n";
+            std::cout << "b2: " << b.i2 << "\n";
             if (!try_find_insert_bucket(b2, res2, key))
             {
                 return table_position{b.i2, static_cast<size_type>(res2),
@@ -1004,7 +1003,22 @@ namespace cuckoohashtable
             for (blog2 = 0; (size_type(1) << blog2) < buckets; ++blog2)
                 ;
             assert(n <= buckets * slot_per_bucket() && buckets <= hashsize(blog2));
+            cout << "RESERVE CALC" << blog2 << "\n";
             return blog2;
+        }
+
+        static size_type
+        new_size_calc(const size_type n) {
+            // update to calculate next multiple of slot_per_bucket (4).
+            size_type cap = n;
+            size_type hp = log2(cap);
+            if(n % slot_per_bucket())
+                cap = n + (slot_per_bucket() - n % slot_per_bucket());
+            cout << "new calc capacity: " << cap << ", check at least " << n << "\n";
+            // ensures hashtable size is at least n items and returns smallest multiple of buckets_per_slot(4)
+            assert(n <= cap);
+
+            return cap;
         }
 
         // Member variables

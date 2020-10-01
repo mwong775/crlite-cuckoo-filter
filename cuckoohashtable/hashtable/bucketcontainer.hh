@@ -90,8 +90,8 @@ namespace cuckoohashtable
             std::array<bool, SLOT_PER_BUCKET> occupied_;
         };
 
-        bucket_container(size_type hp, const allocator_type &allocator) : allocator_(allocator), bucket_allocator_(allocator),
-                                                                          hashpower_(hp), buckets_(bucket_allocator_.allocate(size()))
+        bucket_container(size_type hp, const size_type cap, const allocator_type &allocator) : num_buckets_(cap), allocator_(allocator), bucket_allocator_(allocator),
+                                                                           hashpower_(hp), buckets_(bucket_allocator_.allocate(cap))
         {
             // The bucket default constructor is nothrow, so we don't have to
             // worry about dealing with exceptions when constructing all the
@@ -99,10 +99,12 @@ namespace cuckoohashtable
             // static_assert(std::is_nothrow_constructible<bucket>::key, // 'key' is not a member of nothrow thing
             //               "bucket_container requires bucket to be nothrow "
             //               "constructible");
+            cout << "bucket alloc. size: " << size() << "\n";
             for (size_type i = 0; i < size(); ++i)
             {
                 traits_::construct(allocator_, &buckets_[i]);
             }
+            cout << "finish alloc. buckets\n";
         }
 
         ~bucket_container() noexcept { destroy_buckets(); }
@@ -114,10 +116,14 @@ namespace cuckoohashtable
 
         void hashpower(size_type val)
         {
+            std::cout << "hAsHpOwEr VAL: " << val << "\n";
             hashpower_.store(val, std::memory_order_release);
         }
 
-        size_type size() const { return size_type(1) << hashpower(); }
+        size_type size() const
+        {
+            return num_buckets_ / SLOT_PER_BUCKET;
+        } //return size_type(1) << hashpower(); }
 
         allocator_type get_allocator() const { return allocator_; }
 
@@ -273,6 +279,10 @@ namespace cuckoohashtable
         // These buckets are protected by striped locks (external to the
         // BucketContainer), which must be obtained before accessing a bucket.
         bucket_pointer buckets_;
+
+        // configure number of buckets to next multiple of slot_per_bucket
+        // that was calculated in hashtable
+        size_type num_buckets_;
     };
 } // namespace cuckoohashtable
 

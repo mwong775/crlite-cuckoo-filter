@@ -20,36 +20,33 @@ template <typename KeyType>
 vector<int> hashtable_ops(const uint64_t &init_size, vector<KeyType> &r, vector<KeyType> &s, vector<vector<KeyType>> &fp_table, FILE *file)
 {
     cuckoohashtable::cuckoo_hashtable<KeyType, 12, CityHasher<KeyType>> table(init_size);
-
     // add set R to table
     for (auto c : r)
-    {
         table.insert(c);
-    }
-
+    cout << table.info();
     // check for false negatives with set R
     // size_t false_negs = 0;
     for (auto c : r)
     {
         assert(table.lookup(c) >= 0);
         // if (table.lookup(c) < 0)
-        // {
         //     false_negs++;
-        // }
     }
     // assert(false_negs == 0);
 
+/*
     // lookup set S and count false positives
-
     // track buckets needing rehash using a set
     std::unordered_set<KeyType> rehashBSet;
     int total_rehash = 0;
+    */
 
     /**
      * We check for false positives by looking up fingerprints using
      * mutually exclusive set S. Buckets yielding false positives are rehashed
      * with an incremented seed until no false positives remain from lookup.
      */
+/*
     fprintf(file, "lookup round, false positives, percent fp's\n");
     while (1)
     {
@@ -96,15 +93,12 @@ vector<int> hashtable_ops(const uint64_t &init_size, vector<KeyType> &r, vector<
     cout << table.info();
     fprintf(file, "\nslot per bucket, bucket count, capacity, load factor\n");
     fprintf(file, "%d, %lu, %lu, %.2f\n\n", table.slot_per_bucket(), table.bucket_count(), table.capacity(), table.load_factor() * 100.0);
-    // table.bucketInfo();
 
     std::map<int, int> seed_map;
     table.seedInfo(seed_map);
     fprintf(file, "rehashes per bucket, count\n");
     for (auto &k : seed_map)
-    {
         fprintf(file, "%d, %d\n", k.first, k.second);
-    }
 
     double avg_rehashes = (double)total_rehash / table.bucket_count();
     double rehash_percent = (double)rehashBSet.size() * 100.0 / table.bucket_count();
@@ -114,6 +108,7 @@ vector<int> hashtable_ops(const uint64_t &init_size, vector<KeyType> &r, vector<
     table.export_table(fp_table);
 
     return table.get_seeds();
+        */
 }
 
 template <typename KeyType>
@@ -145,9 +140,7 @@ void create_filter(const uint64_t &init_size, vector<vector<KeyType>> &fp_table,
 
     // check no false negatives
     for (auto c : r)
-    {
         assert(filter.Contain(c) == cuckoofilter::Ok);
-    }
 
     size_t total_queries = 0;
     size_t false_queries = 0;
@@ -174,7 +167,6 @@ void create_filter(const uint64_t &init_size, vector<vector<KeyType>> &fp_table,
      * init/declare: CityHasher<int> ch;
      * cout << key << " , cityhash: " << ch.operator()(key, seed);
     */
-
 int main(int argc, char **argv)
 {
     if (argc <= 1)
@@ -182,7 +174,6 @@ int main(int argc, char **argv)
         cout << "Enter number of items to insert!\n";
         return {};
     }
-
     typedef uint64_t KeyType;
     vector<KeyType> r;
     vector<KeyType> s;
@@ -211,7 +202,7 @@ int main(int argc, char **argv)
     fprintf(file, "insert size, lookup size, init size, max percent load factor\n");
     fprintf(file, "%lu, %lu, %lu, %.1f\n\n", size, size * 100, init_size, max_lf * 100);
 
-    vector<vector<KeyType>> fp_table;
+    vector<vector<KeyType>> fp_table; //table to copy into cuckoo filter
     vector<int> seeds = hashtable_ops(init_size, r, s, fp_table, file);
 
     /*
@@ -223,7 +214,7 @@ int main(int argc, char **argv)
     cout << "]\n";
     */
 
-    create_filter(init_size, fp_table, seeds, r, s, file);
+    // create_filter(init_size, fp_table, seeds, r, s, file);
 
     fclose(file);
 
