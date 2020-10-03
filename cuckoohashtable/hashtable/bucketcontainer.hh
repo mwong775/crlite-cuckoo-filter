@@ -91,7 +91,7 @@ namespace cuckoohashtable
         };
 
         bucket_container(size_type hp, const size_type cap, const allocator_type &allocator) : num_buckets_(cap), allocator_(allocator), bucket_allocator_(allocator),
-                                                                           hashpower_(hp), buckets_(bucket_allocator_.allocate(cap))
+                                                                          hashpower_(hp), buckets_(bucket_allocator_.allocate(cap))
         {
             // The bucket default constructor is nothrow, so we don't have to
             // worry about dealing with exceptions when constructing all the
@@ -99,12 +99,12 @@ namespace cuckoohashtable
             // static_assert(std::is_nothrow_constructible<bucket>::key, // 'key' is not a member of nothrow thing
             //               "bucket_container requires bucket to be nothrow "
             //               "constructible");
-            cout << "bucket alloc. size: " << size() << "\n";
+            // cout << "bucket alloc. size: " << size() << "\n";
             for (size_type i = 0; i < size(); ++i)
             {
                 traits_::construct(allocator_, &buckets_[i]);
             }
-            cout << "finish alloc. buckets\n";
+            // cout << "finish alloc. buckets\n";
         }
 
         ~bucket_container() noexcept { destroy_buckets(); }
@@ -116,14 +116,17 @@ namespace cuckoohashtable
 
         void hashpower(size_type val)
         {
-            std::cout << "hAsHpOwEr VAL: " << val << "\n";
+            // std::cout << "SET hAsHpOwEr VAL: " << val << "\n";
             hashpower_.store(val, std::memory_order_release);
         }
 
         size_type size() const
         {
+            // if hashpower = log2 of bucket count, size should probably be 2 ^ hashpower
             return num_buckets_ / SLOT_PER_BUCKET;
-        } //return size_type(1) << hashpower(); }
+            // return pow(2, hashpower());
+            // return size_type(1) << hashpower();
+        }
 
         allocator_type get_allocator() const { return allocator_; }
 

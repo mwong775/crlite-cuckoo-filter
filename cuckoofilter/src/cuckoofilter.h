@@ -55,7 +55,8 @@ class CuckooFilter {
     // table_->num_buckets is always a power of two, so modulo can be replaced
     // with
     // bitwise-and:
-    return hv & (table_->NumBuckets() - 1);
+    // 10/2/20 - must use modulo for space-opt. (next smallest mult. of 4)
+    return hv % table_->NumBuckets(); //& (table_->NumBuckets() - 1);
   }
 
   inline uint32_t TagHash(uint32_t hv) const {
@@ -106,9 +107,9 @@ class CuckooFilter {
     // 0x5bd1e995 is the hash constant from MurmurHash2
     const size_t hp = log2(table_->NumBuckets());
     const size_t fp = (item >> hp) + 1;
-    const size_t hashmask = table_->NumBuckets() - 1;
+    // const size_t hashmask = table_->NumBuckets() - 1;
     // return IndexHash((uint32_t)(index ^ (item * 0x5bd1e995)));
-    return (index ^ (fp * 0xc6a4a7935bd1e995)) & hashmask;
+    return (index ^ (fp * 0xc6a4a7935bd1e995)) % table_->NumBuckets(); //& hashmask;
   }
 
   Status AddImpl(const size_t i, const uint32_t tag);
@@ -247,8 +248,7 @@ Status CuckooFilter<ItemType, bits_per_item, HashFamily, TableType>::Contain(
 
   // assert(i1 == AltIndex(i2, tag));
 
-  // std::cout << "lup " << tag1 << ", " << tag2 << ": " << i1 << ", " << i2
-  //           << "\n";
+  std::cout << "lup " << tag1 << ", " << tag2 << ": " << i1 << ", " << i2 << "\n";
 
   found = victim_.used && (tag1 == victim_.tag || tag2 == victim_.tag) &&
           (i1 == victim_.index || i2 == victim_.index);

@@ -34,19 +34,17 @@ vector<int> hashtable_ops(const uint64_t &init_size, vector<KeyType> &r, vector<
     }
     // assert(false_negs == 0);
 
-/*
     // lookup set S and count false positives
     // track buckets needing rehash using a set
     std::unordered_set<KeyType> rehashBSet;
     int total_rehash = 0;
-    */
 
     /**
      * We check for false positives by looking up fingerprints using
      * mutually exclusive set S. Buckets yielding false positives are rehashed
      * with an incremented seed until no false positives remain from lookup.
      */
-/*
+
     fprintf(file, "lookup round, false positives, percent fp's\n");
     while (1)
     {
@@ -57,6 +55,7 @@ vector<int> hashtable_ops(const uint64_t &init_size, vector<KeyType> &r, vector<
         table.start_lookup();
         for (auto l : s)
         {
+            // returns index of bucket if false positive, else -1
             int index = table.lookup(l);
             if (index >= 0)
             {
@@ -108,7 +107,6 @@ vector<int> hashtable_ops(const uint64_t &init_size, vector<KeyType> &r, vector<
     table.export_table(fp_table);
 
     return table.get_seeds();
-        */
 }
 
 template <typename KeyType>
@@ -117,17 +115,17 @@ void create_filter(const uint64_t &init_size, vector<vector<KeyType>> &fp_table,
     cuckoofilter::CuckooFilter<size_t, 12, CityHasher<KeyType>> filter(init_size, seeds);
 
     // add set R to filter
-    cout << "fp table size: " << fp_table.size() << "\n";
+    cout << "FILTER fp table size: " << fp_table.size() << "\n";
     for (int i = 0; i < fp_table.size(); i++)
     {
         vector<KeyType> &b = fp_table.at(i);
         // cout << "bucket size: " << b.size() << "\n";
-        // cout << "[ ";
+        cout << "[ ";
         for (int j = 0; j < b.size(); j++)
         {
+            cout << b.at(j) << " ";
             if (b.at(j) != 0)
             {
-                // cout << b.at(j) << " ";
                 if (filter.CopyInsert(b.at(j), i, j) != cuckoofilter::Ok)
                 {
                     cout << "ERROR: cannot copy " << b.at(j) << " into filter\n";
@@ -135,7 +133,7 @@ void create_filter(const uint64_t &init_size, vector<vector<KeyType>> &fp_table,
                 }
             }
         }
-        // cout << "]\n";
+        cout << "] " << seeds.at(i) << "\n";
     }
 
     // check no false negatives
@@ -155,18 +153,17 @@ void create_filter(const uint64_t &init_size, vector<vector<KeyType>> &fp_table,
         total_queries++;
     }
 
+    cout << filter.Info() << "\n";
     // Output the measured false positive rate
     std::cout << "false positive rate is "
               << 100.0 * false_queries / total_queries << "%\n";
-
-    cout << filter.Info() << "\n";
 }
 
 /**
-     * CityHash usage:
-     * init/declare: CityHasher<int> ch;
-     * cout << key << " , cityhash: " << ch.operator()(key, seed);
-    */
+ * CityHash usage:
+ * init/declare: CityHasher<int> ch;
+ * cout << key << " , cityhash: " << ch.operator()(key, seed);
+*/
 int main(int argc, char **argv)
 {
     if (argc <= 1)
@@ -174,6 +171,7 @@ int main(int argc, char **argv)
         cout << "Enter number of items to insert!\n";
         return {};
     }
+
     typedef uint64_t KeyType;
     vector<KeyType> r;
     vector<KeyType> s;
@@ -205,16 +203,14 @@ int main(int argc, char **argv)
     vector<vector<KeyType>> fp_table; //table to copy into cuckoo filter
     vector<int> seeds = hashtable_ops(init_size, r, s, fp_table, file);
 
-    /*
     cout << "retrieved seeds: [ ";
     for (auto i : seeds)
     {
         cout << i << " ";
     }
     cout << "]\n";
-    */
 
-    // create_filter(init_size, fp_table, seeds, r, s, file);
+    create_filter(init_size, fp_table, seeds, r, s, file);
 
     fclose(file);
 
