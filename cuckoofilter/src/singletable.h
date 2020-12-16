@@ -45,9 +45,9 @@ class SingleTable {
 
   size_t SizeInTags() const { return kTagsPerBucket * num_buckets_; }
 
-  std::string Info() const {
+  std::string Info(std::vector<int> seeds_) const {
     std::stringstream ss;
-    // ss << PrintTable() << "\n";
+    ss << PrintTable(seeds_) << "\n";
     ss << "SingleHashtable with tag size: " << bits_per_tag << " bits \n";
     ss << "\t\tAssociativity: " << kTagsPerBucket << "\n";
     ss << "\t\tTotal # of rows: " << num_buckets_ << "\n";
@@ -236,11 +236,12 @@ class SingleTable {
     return num;
   }
 
-  std::string PrintTable() const {
+  std::string PrintTable(std::vector<int> seeds_) const {
     std::stringstream ss;
 
+    ss << "\n";
     for (size_t i = 0; i < num_buckets_; i++) {
-      ss << "[ ";
+      ss << i << ": [ ";
       for (size_t j = 0; j < kTagsPerBucket; j++) {
         if (ReadTag(i, j) != 0) {
           ss << ReadTag(i, j);
@@ -251,7 +252,7 @@ class SingleTable {
           ss << ", ";
         }
       }
-      ss << "]\n";
+      ss << "] " << seeds_.at(i) << "\n";
     }
     return ss.str();
   }

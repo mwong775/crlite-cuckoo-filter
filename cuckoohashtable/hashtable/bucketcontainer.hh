@@ -173,13 +173,9 @@ namespace cuckoohashtable
                             std::cout << b.key(j);
                     }
                     else
-                    {
                         std::cout << " ";
-                    }
                     if (j < SLOT_PER_BUCKET - 1)
-                    {
                         std::cout << ", ";
-                    }
                 }
                 std::cout << "]\n";
             }

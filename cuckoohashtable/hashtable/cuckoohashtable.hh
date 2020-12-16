@@ -151,9 +151,13 @@ namespace cuckoohashtable
                << "\t\tCapacity: " << capacity() << "\n\n"
                << "\t\tKeys stored: " << size() << "\n"
                << "\t\tLoad factor: " << load_factor() << "\n";
+
+            bucketInfo();
+            // hashInfo();
             return ss.str();
         }
 
+        // prints the full table (if small size) with keys and fingerprint formats
         void bucketInfo() const
         {
             buckets_.info();
@@ -189,7 +193,7 @@ namespace cuckoohashtable
         {
             const size_type hp = hashpower();
 
-            std::cout << "CuckkooHashtable Info:\n"
+            std::cout << "CuckkooHashtable Hash Info:\n"
                       << "\t\tHash power: " << hp << "\n"
                       << "\t\tHash size: " << hashsize(hp) << "\n"
                       << "\t\tHash mask: " << hashmask(hp) << "\n";
@@ -209,13 +213,14 @@ namespace cuckoohashtable
 
             // find position in table
             auto b = compute_buckets(key);
+
             table_position pos = cuckoo_insert_loop(b, key); // finds insert spot, does not actually insert
-            // std::cout << "HT inserting key " << key << ": " << pos.index << ", " << pos.slot << "\n";// status: " << pos.status << "\n";
 
             // add to bucket
             if (pos.status == ok)
             {
                 add_to_bucket(pos.index, pos.slot, fp, std::forward<K>(key));
+                std::cout << "HT inserted key " << key << ", fp " << fp << " : " << pos.index << ", " << pos.slot << "\n";// status: " << pos.status << "\n";
                 num_items_++;
             }
             else
@@ -235,45 +240,44 @@ namespace cuckoohashtable
    * @throw std::out_of_range if the key is not found
    */
         template <typename K>
-        bool find(const K &key) const // std::pair<size_type, size_type>
+        int find(const K &key) const // std::pair<size_type, size_type>
         {
             // get hashed key
             // size_type hv = hashed_key(key);
 
             // find position in table
             auto b = compute_buckets(key);
-
             // search in both buckets
+            std::cout << "find in " << b.i1 << ", " << b.i2 << "\n";
             const table_position pos = cuckoo_find(key, b.i1, b.i2);
-            return pos.status == ok;
+            return pos.status == ok ? pos.index : -1;
             /*
             if (pos.status == ok)
-            {
                 // return buckets_[pos.index].key(pos.slot); // this is dumb, maybe update to bool?
                 return std::make_pair(pos.index, pos.slot);
-            }
             else
-            {
                 // return -1;
                 return std::make_pair(-1, -1);
                 // throw std::out_of_range("key not found in table :(");
-            }
             */
         }
 
+        // used as comparison increment seeds for rehashes (e.g. rehash #1 after lookup round #1, inc. seeds from 0 to 1 if seeds < lookup_rd)
         void start_lookup() const
         {
             num_lookup_rds_++;
             // std::cout << "starting lookup round " << num_lookup_rds_ << "\n";
         }
 
-        size_t num_rehashes() {
+        size_t num_rehashes()
+        {
             // last lookup should result in no fp's, so no rehash
             return num_lookup_rds_ - 1;
         }
 
+        // find key by its hashed fingerprint, may yield false positives depending on rehashes
         template <typename K>
-        size_type lookup(const K &key) const
+        int32_t lookup(const K &key) const
         {
             // find position in table
             auto b = compute_buckets(key);
@@ -284,35 +288,29 @@ namespace cuckoohashtable
             partial_t fp1 = partial_key(hv1);
             partial_t fp2 = partial_key(hv2);
 
-            // search in both buckets
-            const table_position pos1 = cuckoo_find_fp(fp1, b.i1);
-            const table_position pos2 = cuckoo_find_fp(fp2, b.i2);
-            // return pos.status == ok;
-            if (pos1.status == ok)
-            {
-                int &seed = seeds_.at(pos1.index);
-                if (seed < num_lookup_rds_)
-                {
-                    seed++;
-                    // std::cout << "fp on key: " << key << " hv: " << hv << " fp: " << fp << " at pos " << pos.index << ", " << pos.slot << ", seed to " << seed << "\n";
-                }
-                // return fp1;
-                return pos1.index;
-            }
+            std::cout << "lookup " << fp1 << " in " << b.i1 << ", " << fp2 << " in " << b.i2 << "\n";
 
-            if (pos2.status == ok)
+            // search in both buckets
+            const table_position pos = cuckoo_find_fp(fp1, b.i1, b.i2);
+            // const table_position pos2 = cuckoo_find_fp(fp2, b.i2);
+
+            if (pos.status == ok)
+                return pos.index;
+
+            // if (pos2.status == ok)
+            //     return pos2.index;
+
+            return -1;
+        }
+
+        void inc_seed(const size_type index)
+        {
+            int &seed = seeds_.at(index);
+            if (seed < num_lookup_rds_)
             {
-                int &seed = seeds_.at(pos2.index);
-                if (seed < num_lookup_rds_)
-                {
-                    seed++;
-                    // std::cout << "fp on key: " << key << " hv: " << hv << " fp: " << fp << " at pos " << pos.index << ", " << pos.slot << ", seed to " << seed << "\n";
-                }
-                // return fp2;
-                return pos2.index;
+                seed++;
+                // std::cout << "pos " << index << ", " << "seed to " << seed << "\n";
             }
-            else
-                return -1;
         }
 
         int rehash_buckets()
@@ -330,7 +328,7 @@ namespace cuckoohashtable
                         const size_type key = b.key(j);
                         size_type hv = hashed_key(key, seeds_.at(i));
                         partial_t fp = partial_key(hv);
-                        std::cout << "new hv: " << hv << " fp: " << fp << " lup rd: " << num_lookup_rds_ <<  "\n";
+                        // std::cout << "new hv: " << hv << " fp: " << fp << " lup rd: " << num_lookup_rds_ <<  "\n";
                         if (b.occupied(j))
                             fp_to_bucket(i, j, fp);
                     }
@@ -339,7 +337,8 @@ namespace cuckoohashtable
             return b_count;
         }
 
-        std::vector<int> get_seeds() { // std::vector<int> &seeds
+        std::vector<int> get_seeds()
+        { // std::vector<int> &seeds
             return seeds_;
             // seeds.resize(seeds_.size());
             // for(int i = 0; i < seeds_.size(); i++) {
@@ -348,10 +347,13 @@ namespace cuckoohashtable
         }
 
         template <typename key_type>
-        void export_table(std::vector<std::vector<key_type>> &fp_table) {
-            for(int i = 0; i < bucket_count(); i++) {
+        void export_table(std::vector<std::vector<key_type>> &fp_table)
+        {
+            for (int i = 0; i < bucket_count(); i++)
+            {
                 std::vector<key_type> fp_bucket;
-                for(int j = 0; j < static_cast<int>(slot_per_bucket()); j++) {
+                for (int j = 0; j < static_cast<int>(slot_per_bucket()); j++)
+                {
                     fp_bucket.push_back(buckets_[i].partial(j));
                 }
                 fp_table.push_back(fp_bucket);
@@ -396,11 +398,12 @@ namespace cuckoohashtable
 
         // index_hash returns the first possible bucket that the given hashed key
         // could be.
-        static inline size_type index_hash(const size_type key, const size_type bucket_count) // const size_type hp,
+        static inline size_type index_hash(const size_type hp, partial_t fp, const size_type hv, const size_type bucket_count) // const size_type hp,
         {
-            const uint32_t hash = key >> 32;
-            return hash % bucket_count; // & hashmask(hp);
-            // return hv & hashmask(hp);
+            // const uint32_t hash = key >> 32;
+            // std::cout << "index_hash: " << hv << " & " << bucket_count - 1 << "\n";
+            // return (hv & (bucket_count - 1)); // & hashmask(hp);
+            return hv & bucket_count;
         }
 
         // alt_index returns the other possible bucket that the given hashed key
@@ -408,8 +411,8 @@ namespace cuckoohashtable
         // this function will return the first possible bucket if index is the
         // second possible bucket, so alt_index(ti, partial, alt_index(ti, partial,
         // index_hash(ti, hv))) == index_hash(ti, hv).
-        static inline size_type alt_index(const size_type hp, const size_type key,
-                                          const size_type index, const size_type bucket_count) // const size_type hp, 
+        static inline size_type alt_index(const size_type hp, partial_t fp,
+                                          const size_type index, const size_type bucket_count) // const size_type hp,
         {
             // (libcuckoo) ensure fp is nonzero for the multiply. 0xc6a4a7935bd1e995 is the
             // hash constant from 64-bit MurmurHash2
@@ -417,11 +420,16 @@ namespace cuckoohashtable
             // (DRECHT) ensure fp is nonzero for the multiply
 
             // >> (right shift)
-            const size_t fp = (key >> hp) + 1;
+            // const size_t fp = (key >> hp) + 1;
             // std::cout << "HT hp: " << hp << ", right shift: " << fp << "key: " << key << "\n";
 
             // ^ (bitwise XOR), & (bitwise AND)
-            return (index ^ (fp * 0xc6a4a7935bd1e995)) % bucket_count; // & hashmask(hp);
+            const size_type nonzero_tag = static_cast<size_type>(fp) + 1;
+            // std::cout << "alt_index: " << (index ^ (nonzero_tag * 0xc6a4a7935bd1e995)) << " & " << bucket_count - 1 << "\n";
+            // return ((index ^ (nonzero_tag * 0xc6a4a7935bd1e995)) & (bucket_count - 1)); // & hashmask(hp);
+            // return ((index ^ (nonzero_tag * 0xc6a4a7935bd1e995)) & hashmask(hp)) % bucket_count;
+            return index_hash(hp, fp, index ^ (nonzero_tag * 0xc6a4a7935bd1e995), bucket_count);
+            // return index_hash(hp, fp, index ^ (nonzero_tag * 0x5bd1e995), bucket_count); // shorter cuckoo filter version 
         }
 
         class TwoBuckets
@@ -441,10 +449,17 @@ namespace cuckoohashtable
         TwoBuckets compute_buckets(const size_type key) const // size_type, size_type i1, size_type i2
         {
             const size_type hp = hashpower();
-            const size_type i1 = index_hash(key, bucket_count());
-            const size_type i2 = alt_index(hp, key, i1, bucket_count());
+            const size_type hv = hashed_key(key);
+            const size_type hash = hv >> 32;
+            partial_t fp = partial_key(hv);
+            const size_type i1 = index_hash(hp, fp, hv, bucket_count());
+            const size_type i2 = alt_index(hp, fp, i1, bucket_count());
 
-            // std::cout << "HT computed buckets " << i1 << " and " << i2 << "\n";
+            const size_type temp = alt_index(hp, fp, alt_index(hp, fp, index_hash(hp, fp, hv, bucket_count()), bucket_count()), bucket_count());
+
+            std::cout << "HT computed buckets " << i1 << " and " << i2 << "\t check: " << temp << "\n";
+            // alt_index(ti, partial, alt_index(ti, partial, index_hash(ti, hv))) == index_hash(ti, hv).
+            
 
             return TwoBuckets(i1, i2);
         }
@@ -479,43 +494,32 @@ namespace cuckoohashtable
         // cuckoo_find searches the table for the given key, returning the position
         // of the element found, or a failure status code if the key wasn't found.
         template <typename K>
-        table_position cuckoo_find(const K &key, const size_type i1, const size_type i2, partial_t fp = -1) const
+        table_position cuckoo_find(const K &key, const size_type i1, const size_type i2) const
         {
-            int slot;
-            if (fp >= 0)
-            {
-                slot = try_fp_in_bucket(buckets_[i1], fp);
-            }
-            else
-            {
-                slot = try_read_from_bucket(buckets_[i1], key); // check each slot in bucket 1
-            }
-            if (slot != -1)
-            {
-                return table_position{i1, static_cast<size_type>(slot), ok};
-            }
+            // ASSUMPTION: fingerprints are positive (unsigned) integers
+            int slot = try_read_from_bucket(buckets_[i1], key); // check each slot in bucket 1
 
-            if (fp >= 0)
-            {
-                slot = try_fp_in_bucket(buckets_[i2], fp);
-            }
-            else
-            {
-                slot = try_read_from_bucket(buckets_[i2], key); // check each slot in bucket 2
-            }
             if (slot != -1)
-            {
+                return table_position{i1, static_cast<size_type>(slot), ok};
+
+            slot = try_read_from_bucket(buckets_[i2], key); // check each slot in bucket 2
+
+            if (slot != -1)
                 return table_position{i2, static_cast<size_type>(slot), ok};
-            }
+
             return table_position{0, 0, failure_key_not_found};
         }
 
-        table_position cuckoo_find_fp(partial_t fp, const size_type i) const
+        table_position cuckoo_find_fp(partial_t fp, const size_type i1, const size_type i2) const
         {
-            int slot;
-            slot = try_fp_in_bucket(buckets_[i], fp);
+            int slot = try_fp_in_bucket(buckets_[i1], fp);
             if (slot != -1)
-                return table_position{i, static_cast<size_type>(slot), ok};
+                return table_position{i1, static_cast<size_type>(slot), ok};
+
+            slot = try_fp_in_bucket(buckets_[i2], fp);
+            if (slot != -1)
+                return table_position{i2, static_cast<size_type>(slot), ok};
+
             return table_position{0, 0, failure_key_not_found};
         }
 
@@ -527,9 +531,7 @@ namespace cuckoohashtable
             for (int i = 0; i < static_cast<int>(slot_per_bucket()); ++i)
             {
                 if (key_eq()(b.key(i), key))
-                {
                     return i;
-                }
             }
             return -1;
         }
@@ -540,16 +542,13 @@ namespace cuckoohashtable
         {
             for (int i = 0; i < static_cast<int>(slot_per_bucket()); ++i)
             {
-                if (p == b.partial(i))
-                {
-                    // std::cout << "found " << p << " == " << b.partial(i) << " at slot " << i << "\n";
+                if (p == b.partial(i)) // std::cout << "found " << p << " == " << b.partial(i) << " at slot " << i << "\n";
                     return i;
-                }
             }
             return -1;
         }
 
-        // Insertion types and function
+    // Insertion types and function
 
         /**
    * Runs cuckoo_insert in a loop until it succeeds in insert and upsert, so
@@ -581,15 +580,6 @@ namespace cuckoohashtable
                 case failure_table_full:
                     throw std::out_of_range("table full :(");
                     break;
-                //     // Expand the table and try again, re-grabbing the locks
-                //     cuckoo_fast_double<TABLE_MODE, automatic_resize>(hp);
-                //     b = snapshot_and_lock_two<TABLE_MODE>(hv);
-                //     break;
-                // case failure_under_expansion:
-                //     // The table was under expansion while we were cuckooing. Re-grab the
-                //     // locks and try again.
-                //     b = snapshot_and_lock_two<TABLE_MODE>(hv);
-                //     break;
                 default:
                     std::cout << "error on index: " << pos.index << " slot: " << pos.slot << " status: " << pos.status << "\n";
                     info();
@@ -621,42 +611,38 @@ namespace cuckoohashtable
         {
             // cout << "cuckoo ins\n";
             int res1, res2; // gets indices
+            
             bucket &b1 = buckets_[b.i1];
             // std::cout << "b1: " << b.i1 << "\n";
             if (!try_find_insert_bucket(b1, res1, key))
-            {
-                return table_position{b.i1, static_cast<size_type>(res1),
-                                      failure_key_duplicated};
-            }
+                return table_position{b.i1, static_cast<size_type>(res1), failure_key_duplicated};
+
             bucket &b2 = buckets_[b.i2];
             // std::cout << "b2: " << b.i2 << "\n";
             if (!try_find_insert_bucket(b2, res2, key))
-            {
-                return table_position{b.i2, static_cast<size_type>(res2),
-                                      failure_key_duplicated};
-            }
+                return table_position{b.i2, static_cast<size_type>(res2), failure_key_duplicated};
+
             if (res1 != -1)
-            {
                 return table_position{b.i1, static_cast<size_type>(res1), ok};
-            }
+
             if (res2 != -1)
-            {
                 return table_position{b.i2, static_cast<size_type>(res2), ok};
-            }
 
             // We are unlucky, so let's perform cuckoo hashing ~
             size_type insert_bucket = 0;
             size_type insert_slot = 0;
             cuckoo_status st = run_cuckoo(b, insert_bucket, insert_slot);
+            std::cout << "RAN CUCKOO on buckets " << b.i1 << ", " << b.i2 << ", insert_bucket: " << insert_bucket << ", insert_slot: " << insert_slot << "\n"; 
             if (st == ok)
             {
                 assert(!buckets_[insert_bucket].occupied(insert_slot));
+                // assert(insert_bucket == index_hash(ti, hv) || insert_bucket == alt_index(ti, hv, index_hash(ti, hv)));
                 // assert(insert_bucket == index_hash(bucket_count(), key) || insert_bucket == alt_index(bucket_count(), key, index_hash(bucket_count(), key), bucket_count()));
 
                 return table_position{insert_bucket, insert_slot, ok};
             }
             assert(st == failure);
-            std::cout << "hashtable is full (hashpower = " << hashpower() << ", hash_items = " << size() << ", load factor = " << load_factor() << "), need to increase hashpower\n";
+            std::cout << "hashtable is full (hashpower = " << hashpower() << ", hash_items = " << size() << ", load factor = " << load_factor() << "), need to increase hashpower\n" << info();
             return table_position{0, 0, failure_table_full};
         }
 
@@ -727,7 +713,7 @@ namespace cuckoohashtable
         // returns ok (success), then `b` will be active, otherwise it will not.
         cuckoo_status run_cuckoo(TwoBuckets &b, size_type &insert_bucket, size_type &insert_slot)
         {
-            // std::cout << "run_cuckoo\n";
+            std::cout << "run_cuckoo\n";
             // cuckoo_search and cuckoo_move
             size_type hp = hashpower();
             CuckooRecords cuckoo_path;
@@ -735,18 +721,16 @@ namespace cuckoohashtable
             while (!done)
             {
                 const int depth = cuckoopath_search(hp, cuckoo_path, b.i1, b.i2);
-                // std::cout << "depth: " << depth << "\n";
+                std::cout << "depth: " << depth << "\n";
                 if (depth < 0)
-                {
                     break;
-                }
 
                 if (cuckoopath_move(hp, cuckoo_path, depth, b))
                 {
                     // store freed up bucket and slot
                     insert_bucket = cuckoo_path[0].bucket;
                     insert_slot = cuckoo_path[0].slot;
-                    // std::cout << "insert: " << insert_bucket << ", " << insert_slot << "\n";
+                    std::cout << "insert: " << insert_bucket << ", " << insert_slot << "\n";
                     assert(insert_bucket == b.i1 || insert_bucket == b.i2);
                     assert(!buckets_[insert_bucket].occupied(insert_slot));
                     done = true;
@@ -764,9 +748,8 @@ namespace cuckoohashtable
         {
             b_slot x = slot_search(hp, i1, i2);
             if (x.depth == -1)
-            {
                 return -1;
-            }
+
             // Fill in the cuckoo path slots from the end to the beginning.
             for (int i = x.depth; i >= 0; i--)
             {
@@ -778,22 +761,19 @@ namespace cuckoohashtable
             // starts on.
             CuckooRecord &first = cuckoo_path[0];
             if (x.pathcode == 0)
-            {
                 first.bucket = i1;
-            }
             else
             {
                 assert(x.pathcode == 1);
                 first.bucket = i2;
             }
-            {
-                const bucket &b = buckets_[first.bucket];
-                if (!b.occupied(first.slot))
-                {
-                    return 0;
-                }
-                first.key = b.key(first.slot);
-            }
+
+            const bucket &b = buckets_[first.bucket];
+            if (!b.occupied(first.slot))
+                return 0;
+
+            first.key = b.key(first.slot);
+            
             for (int i = 1; i <= x.depth; ++i)
             {
                 CuckooRecord &curr = cuckoo_path[i];
@@ -846,8 +826,8 @@ namespace cuckoohashtable
                 bucket &fb = buckets_[from.bucket];
                 bucket &tb = buckets_[to.bucket];
 
-                // std::cout << "from: " << from.bucket << ", " << from.slot << "\n";
-                // std::cout << "to: " << to.bucket << ", " << to.slot << "\n";
+                std::cout << fb.partial(fs) << " from: " << from.bucket << ", " << from.slot << "\n";
+                std::cout << "to: " << to.bucket << ", " << to.slot << "\n";
 
                 // checks valid cuckoo, and that the hash value is the same
                 if (tb.occupied(ts) || !fb.occupied(fs) || fb.key(fs) != from.key)
@@ -957,7 +937,7 @@ namespace cuckoohashtable
         {
             b_queue q;
             // The initial pathcode informs cuckoopath_search which bucket the path starts on
-            q.enqueue(b_slot(i1, 0, 0));
+            q.enqueue(b_slot(i1, 0, 0)); // b_lot -> (bucket, pathcode, depth)
             q.enqueue(b_slot(i2, 1, 0));
             while (!q.empty())
             {
@@ -999,20 +979,21 @@ namespace cuckoohashtable
         static size_type
         reserve_calc(const size_type n)
         {
-            const size_type buckets = new_size_calc(n) / slot_per_bucket();//(n + slot_per_bucket() - 1) / slot_per_bucket();
+            const size_type buckets = new_size_calc(n) / slot_per_bucket(); //(n + slot_per_bucket() - 1) / slot_per_bucket();
             size_type blog2;
             for (blog2 = 0; (size_type(1) << blog2) < buckets; ++blog2)
                 ;
             assert(n <= buckets * slot_per_bucket() && buckets <= hashsize(blog2));
-            // cout << "RESERVE CALC: " << blog2 << "\n";
+            cout << "RESERVE CALC: " << blog2 << "\n";
             return blog2;
         }
 
         static size_type
-        new_size_calc(const size_type n) {
+        new_size_calc(const size_type n)
+        {
             // update to calculate next multiple of slot_per_bucket (4).
             size_type cap = n;
-            if(n % slot_per_bucket())
+            if (n % slot_per_bucket())
                 cap = n + (slot_per_bucket() - n % slot_per_bucket());
             // ensures hashtable size is at least n items and returns smallest multiple of buckets_per_slot(4)
             assert(n <= cap);
