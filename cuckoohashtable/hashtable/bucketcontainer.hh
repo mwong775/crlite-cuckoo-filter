@@ -133,6 +133,34 @@ namespace cuckoohashtable
             print("fp"); // fingerprints
         }
 
+        void printBucket(const size_t i)
+        {
+            bucket &b = buckets_[i];
+            std::cout << "Bucket " << i << ": [ ";
+            for (size_type j = 0; j < SLOT_PER_BUCKET; ++j)
+            {
+                if (b.occupied(j))
+                    std::cout << b.key(j);
+                else
+                    std::cout << " ";
+
+                if (j < SLOT_PER_BUCKET - 1)
+                    std::cout << ", ";
+            }
+            std::cout << "]\tFP/partials: [ ";
+            for (size_type j = 0; j < SLOT_PER_BUCKET; ++j)
+            {
+                if (b.occupied(j))
+                    std::cout << b.partial(j);
+                else
+                    std::cout << " ";
+
+                if (j < SLOT_PER_BUCKET - 1)
+                    std::cout << ", ";
+            }
+            std::cout << "]\t";
+        }
+
         void print(std::string arg = "") const
         {
             int it = size() > 40 ? 10 : size();

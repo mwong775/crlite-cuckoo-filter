@@ -17,25 +17,24 @@ void random_gen(int n, vector<uint64_t> &store, mt19937 &rd)
 }
 
 template <typename KeyType>
-vector<int> hashtable_ops(const uint64_t &init_size, vector<KeyType> &r, vector<KeyType> &s, vector<vector<KeyType>> &fp_table, FILE *file)
+vector<uint16_t> hashtable_ops(const uint64_t &init_size, vector<KeyType> &r, vector<KeyType> &s, vector<vector<KeyType>> &fp_table, FILE *file)
 {
     cuckoohashtable::cuckoo_hashtable<KeyType, 12, CityHasher<KeyType>> table(init_size);
 
     // add set R to table
-    for (auto c : r)
+    for (KeyType c : r)
     {
         table.insert(c);
     }
 
     // check for false negatives with set R
     // size_t false_negs = 0;
-    for (auto c : r)
+    for (KeyType c : r)
     {
         assert(table.lookup(c) >= 0);
+        assert(table.find(c).first >= 0); // first = index, second = slot
         // if (table.lookup(c) < 0)
-        // {
         //     false_negs++;
-        // }
     }
     // assert(false_negs == 0);
 
@@ -58,22 +57,27 @@ vector<int> hashtable_ops(const uint64_t &init_size, vector<KeyType> &r, vector<
         size_t definite_queries = 0;
 
         table.start_lookup();
-        for (auto l : s)
+        for (KeyType l : s)
         {
+            if (table.find(l).first >= 0)
+                definite_queries++;
+            total_queries++;
+
             int index = table.lookup(l);
             if (index >= 0)
             {
                 false_queries++;
-                if (rehashBSet.find(index) == rehashBSet.end())
-                {
-                    rehashBSet.insert(index);
-                }
-            }
-            if (table.find(l))
+                // if (rehashBSet.find(index) == rehashBSet.end())
+                // {
+                rehashBSet.insert(index);
+                // }
+                // if (index == 1487)
+                //     cout << "FALSE POS " << index << " on round " << table.num_rehashes() + 1 << ", query #" << total_queries << ", false query #" << false_queries << "\n";
+            } else
             {
-                definite_queries++;
+                assert(index == -1); // ensures not found returns -1
             }
-            total_queries++;
+            
         }
         assert(definite_queries == 0); // normal HT should only result in true negatives, no fp's
 
@@ -84,13 +88,9 @@ vector<int> hashtable_ops(const uint64_t &init_size, vector<KeyType> &r, vector<
         fprintf(file, "%lu, %lu, %.6f\n", table.num_rehashes() + 1, false_queries, fp);
 
         if (false_queries > 0)
-        {
             total_rehash += table.rehash_buckets();
-        }
         else
-        {
             break;
-        }
     }
 
     cout << table.info();
@@ -98,7 +98,7 @@ vector<int> hashtable_ops(const uint64_t &init_size, vector<KeyType> &r, vector<
     fprintf(file, "%d, %lu, %lu, %.2f\n\n", table.slot_per_bucket(), table.bucket_count(), table.capacity(), table.load_factor() * 100.0);
     // table.bucketInfo();
 
-    std::map<int, int> seed_map;
+    std::map<uint16_t, uint16_t> seed_map;
     table.seedInfo(seed_map);
     fprintf(file, "rehashes per bucket, count\n");
     for (auto &k : seed_map)
@@ -113,15 +113,26 @@ vector<int> hashtable_ops(const uint64_t &init_size, vector<KeyType> &r, vector<
 
     table.export_table(fp_table);
 
+    // size: 10k, hashpower: 12, hashmask: 4095
+    // cout << "HT hashpower: " << table.hashpower() << " hashmask: " << table.hashmask(table.hashpower()) << "\n";
+
+    // if (table.bucket_count() >= 494)
+    //     table.printBucket(494); // TODO: false negative's for size 24000
+    // if (table.bucket_count() >= 1487)
+    // {
+    //     table.printBucket(1487); // TODO: false negative's for size 10000
+    //     cout << "hashed 1487? " << table.hashed_key(1142226650890717974, 1) << " no seed: " << table.hashed_key(1142226650890717974, 0) << "\n";
+    // }
+
     return table.get_seeds();
 }
 
 template <typename KeyType>
-void create_filter(const uint64_t &init_size, vector<vector<KeyType>> &fp_table, vector<int> &seeds, vector<KeyType> &r, vector<KeyType> &s, FILE *file)
+void create_filter(const uint64_t &init_size, vector<vector<KeyType>> &fp_table, vector<uint16_t> &seeds, vector<KeyType> &r, vector<KeyType> &s, FILE *file)
 {
-    cuckoofilter::CuckooFilter<size_t, 12, CityHasher<KeyType>> filter(init_size, seeds);
+    cuckoofilter::CuckooFilter<KeyType, 12, CityHasher<KeyType>> filter(init_size, seeds);
 
-    // add set R to filter
+    // add Set R to filter
     cout << "fp table size: " << fp_table.size() << "\n";
     for (int i = 0; i < fp_table.size(); i++)
     {
@@ -132,26 +143,32 @@ void create_filter(const uint64_t &init_size, vector<vector<KeyType>> &fp_table,
         {
             if (b.at(j) != 0)
             {
-                // cout << b.at(j) << " ";
-                if (filter.CopyInsert(b.at(j), i, j) != cuckoofilter::Ok)
-                {
-                    cout << "ERROR: cannot copy " << b.at(j) << " into filter\n";
-                    break;
-                }
+                // if (filter.CopyInsert(b.at(j), i, j) != cuckoofilter::Ok)
+                // {
+                //     cout << "ERROR: cannot copy " << b.at(j) << " into filter\n";
+                //     break;
+                // }
+                assert(filter.CopyInsert(b.at(j), i, j) == cuckoofilter::Ok);
             }
         }
-        // cout << "]\n";
     }
 
-    // check no false negatives
+    // check no false negatives - failing here with sizes above 10k :(
+    cout << "\nChecking CF false negatives:\n";
     for (auto c : r)
     {
+        // if (filter.Contain(c) != cuckoofilter::Ok)
+        // {
+            // CityHasher<int> ch;
+            // cout << "\n494 cityhash: " << ch.operator()(494, seeds.at(494)) << "\n";
+            // cout  << "1487 cityhash: " << ch.operator()(1487, seeds.at(1487)) << "\n";
+        // }
+        // cout << "false neg at " << table.find(c).first << ", " << table.find(c).second << "\n";
         assert(filter.Contain(c) == cuckoofilter::Ok);
     }
 
     size_t total_queries = 0;
     size_t false_queries = 0;
-
     for (auto l : s)
     {
         if (filter.Contain(l) == cuckoofilter::Ok)
@@ -165,7 +182,6 @@ void create_filter(const uint64_t &init_size, vector<vector<KeyType>> &fp_table,
     // Output the measured false positive rate
     std::cout << "false positive rate is "
               << 100.0 * false_queries / total_queries << "%\n";
-
     cout << filter.Info() << "\n";
 }
 
@@ -212,7 +228,7 @@ int main(int argc, char **argv)
     fprintf(file, "%lu, %lu, %lu, %.1f\n\n", size, size * 100, init_size, max_lf * 100);
 
     vector<vector<KeyType>> fp_table;
-    vector<int> seeds = hashtable_ops(init_size, r, s, fp_table, file);
+    vector<uint16_t> seeds = hashtable_ops(init_size, r, s, fp_table, file);
 
     /*
     cout << "retrieved seeds: [ ";

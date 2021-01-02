@@ -50,9 +50,22 @@ class SingleTable {
     // ss << PrintTable() << "\n";
     ss << "SingleHashtable with tag size: " << bits_per_tag << " bits \n";
     ss << "\t\tAssociativity: " << kTagsPerBucket << "\n";
-    ss << "\t\tTotal # of rows: " << num_buckets_ << "\n";
+    ss << "\t\tTotal # of rows (buckets): " << num_buckets_ << "\n";
     ss << "\t\tTotal # slots: " << SizeInTags() << "\n";
     return ss.str();
+  }
+
+  void PrintBucket(const size_t i) const {
+    std::cout << "Bucket " << i << ": [ ";
+    for (size_t j = 0; j < kTagsPerBucket; j++) {
+      if (ReadTag(i, j) != 0)
+        std::cout << ReadTag(i, j);
+      else
+        std::cout << " ";
+      if (j < kTagsPerBucket - 1)
+        std::cout << ", ";
+    }
+    std::cout << "]\t";
   }
 
   // read tag from pos(i,j)
@@ -116,29 +129,31 @@ class SingleTable {
 
   inline bool FindTagInBuckets(const size_t i1, const size_t i2,
                                const uint32_t tag1, const uint32_t tag2) const {
-    const char *p1 = buckets_[i1].bits_;
-    const char *p2 = buckets_[i2].bits_;
+    return FindTagInBucket(i1, tag1) || FindTagInBucket(i2, tag2);
 
-    uint64_t v1 = *((uint64_t *)p1);
-    uint64_t v2 = *((uint64_t *)p2);
+    // const char *p1 = buckets_[i1].bits_;
+    // const char *p2 = buckets_[i2].bits_;
 
-    // caution: unaligned access & assuming little endian
-    if (bits_per_tag == 4 && kTagsPerBucket == 4) {
-      return hasvalue4(v1, tag1) || hasvalue4(v2, tag2);
-    } else if (bits_per_tag == 8 && kTagsPerBucket == 4) {
-      return hasvalue8(v1, tag1) || hasvalue8(v2, tag2);
-    } else if (bits_per_tag == 12 && kTagsPerBucket == 4) {
-      return hasvalue12(v1, tag1) || hasvalue12(v2, tag2);
-    } else if (bits_per_tag == 16 && kTagsPerBucket == 4) {
-      return hasvalue16(v1, tag1) || hasvalue16(v2, tag2);
-    } else {
-      for (size_t j = 0; j < kTagsPerBucket; j++) {
-        if ((ReadTag(i1, j) == tag1) || (ReadTag(i2, j) == tag2)) {
-          return true;
-        }
-      }
-      return false;
-    }
+    // uint64_t v1 = *((uint64_t *)p1);
+    // uint64_t v2 = *((uint64_t *)p2);
+
+    // // caution: unaligned access & assuming little endian
+    // if (bits_per_tag == 4 && kTagsPerBucket == 4) {
+    //   return hasvalue4(v1, tag1) || hasvalue4(v2, tag2);
+    // } else if (bits_per_tag == 8 && kTagsPerBucket == 4) {
+    //   return hasvalue8(v1, tag1) || hasvalue8(v2, tag2);
+    // } else if (bits_per_tag == 12 && kTagsPerBucket == 4) {
+    //   return hasvalue12(v1, tag1) || hasvalue12(v2, tag2);
+    // } else if (bits_per_tag == 16 && kTagsPerBucket == 4) {
+    //   return hasvalue16(v1, tag1) || hasvalue16(v2, tag2);
+    // } else {
+    //   for (size_t j = 0; j < kTagsPerBucket; j++) {
+    //     if ((ReadTag(i1, j) == tag1) || (ReadTag(i2, j) == tag2)) {
+    //       return true;
+    //     }
+    //   }
+    //   return false;
+    // }
   }
 
   inline bool FindTagInBucket(const size_t i, const uint32_t tag) const {
@@ -181,7 +196,9 @@ class SingleTable {
   }
 
   inline bool PairedInsertTagToBucket(const size_t i, const size_t j,
-                                      const uint32_t tag, const bool kickout = false, uint32_t &oldtag = 0) {
+                                      const uint32_t tag,
+                                      const bool kickout = false,
+                                      uint32_t &oldtag = 0) {
     // std::cout << "Bucket insert: " << i << ", " << j << "\n\n";
     if (ReadTag(i, j) == 0) {
       WriteTag(i, j, tag);
@@ -189,12 +206,11 @@ class SingleTable {
     } else {
       if (kickout) {
         oldtag = ReadTag(i, j);
-              // std::cout << "slot filled -  "
-              //      "\n\toccupying tag: "
-              //   << oldtag << "\n\tpos: " << i << " and " << j
-              //   << "\n\tinserting tag: " << tag << "\n";
+        // std::cout << "slot filled -  "
+        //      "\n\toccupying tag: "
+        //   << oldtag << "\n\tpos: " << i << " and " << j
+        //   << "\n\tinserting tag: " << tag << "\n";
         WriteTag(i, j, tag);
-
       }
       return false;
     }
@@ -216,10 +232,11 @@ class SingleTable {
     }
     return false;
   }
-  
+
   // copies tag into specified index and slot in table
-  inline bool CopyTagToBucket(const size_t i, const size_t j, const uint32_t tag) {
-    if(ReadTag(i, j) == 0) {
+  inline bool CopyTagToBucket(const size_t i, const size_t j,
+                              const uint32_t tag) {
+    if (ReadTag(i, j) == 0) {
       WriteTag(i, j, tag);
       return true;
     }

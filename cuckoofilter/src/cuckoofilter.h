@@ -49,16 +49,23 @@ class CuckooFilter {
 
   HashFamily hasher_;
 
-  std::vector<int> seeds_;
+  std::vector<uint16_t> seeds_;
 
-  inline size_t IndexHash(uint32_t hv) const {
+  template <typename K>
+  inline uint64_t Hash(const K &key, uint32_t seed = 0) const {
+    return hasher_(key, seed);
+  }
+
+  inline size_t IndexHash(const ItemType &item) const {
     // table_->num_buckets is always a power of two, so modulo can be replaced
     // with
     // bitwise-and:
-    return hv & (table_->NumBuckets() - 1);
+    const uint32_t hash = item >> 32;
+    return hash & (table_->NumBuckets() - 1);
   }
 
-  inline uint32_t TagHash(uint32_t hv) const {
+  inline uint32_t TagHash(
+      uint64_t hv) const {  // equiv. to partial_key function in hashtable
     uint32_t tag;
     tag = hv & ((1ULL << bits_per_item) - 1);
     tag += (tag == 0);
@@ -67,13 +74,10 @@ class CuckooFilter {
 
   inline void GenerateIndexTagHash(const ItemType &item, size_t *index,
                                    uint32_t *tag) const {
-    *index = IndexHash(item >> 32);  // original: hash >> 32
-    // if(*index == 5)
-    // std::cout << "index: " << *index << " seed: " << seeds_.at(*index) <<
-    // "\n";
-    if (seeds_.at(*index) > 0)
-      std::cout << "rehashed " << seeds_.at(*index) << " bucket " << *index
-                << "\n";
+    *index = IndexHash(item);  // original: hash >> 32
+    // if (seeds_.at(*index) > 0)
+    //   std::cout << "rehashed " << seeds_.at(*index) << " bucket " << *index
+    //             << "\n";
     const uint64_t hash = hasher_(item, seeds_.at(*index));
     *tag = TagHash(hash);
   }
@@ -81,9 +85,8 @@ class CuckooFilter {
   // modified of above function to use for 2 indices and tags
   inline void GenerateTagHashes(const ItemType &item, size_t *i1, size_t *i2,
                                 uint32_t *tag1, uint32_t *tag2) const {
-    *i1 = IndexHash(item >> 32);  // original: hash >> 32
+    *i1 = IndexHash(item);  // original: hash >> 32
     *i2 = AltIndex(*i1, item);
-
     const uint64_t hash1 = hasher_(item, seeds_.at(*i1));
     const uint64_t hash2 = hasher_(item, seeds_.at(*i2));
     *tag1 = TagHash(hash1);
@@ -131,9 +134,10 @@ class CuckooFilter {
     victim_.used = false;
     table_ = new TableType<bits_per_item>(num_buckets);
   }
+
   // modified constructor
   explicit CuckooFilter(const size_t max_num_keys,
-                        const std::vector<int> &seeds)
+                        const std::vector<uint16_t> &seeds)
       : num_items_(0), victim_(), hasher_() {
     size_t assoc = 4;
     size_t num_buckets = seeds.size();
@@ -173,7 +177,7 @@ class CuckooFilter {
   // number of current inserted items;
   size_t Size() const { return num_items_; }
 
-  // size of the filter in bytes.
+  // size of the filter in bytes. TODO: modify to include seeds if used.
   size_t SizeInBytes() const { return table_->SizeInBytes(); }
 };
 
@@ -237,27 +241,41 @@ Status CuckooFilter<ItemType, bits_per_item, HashFamily, TableType>::Contain(
     const ItemType &key) const {
   bool found = false;
   size_t i1, i2;
-  uint32_t tag1;
-  uint32_t tag2;
+  uint32_t tag1, tag2;
 
-  // GenerateIndexTagHash(key, &i1, &tag1);
   GenerateTagHashes(key, &i1, &i2, &tag1, &tag2);
-
-  // i2 = AltIndex(i1, key);
-
-  // assert(i1 == AltIndex(i2, tag));
+  assert(i1 == AltIndex(i2, key));
 
   // std::cout << "lup " << tag1 << ", " << tag2 << ": " << i1 << ", " << i2
   //           << "\n";
 
-  found = victim_.used && (tag1 == victim_.tag || tag2 == victim_.tag) &&
-          (i1 == victim_.index || i2 == victim_.index);
+  // found = victim_.used && (tag1 == victim_.tag || tag2 == victim_.tag) &&
+  //         (i1 == victim_.index || i2 == victim_.index);
 
-  if (found || table_->FindTagInBuckets(i1, i2, tag1, tag2)) {
+  if (table_->FindTagInBuckets(i1, i2, tag1, tag2)) {  // found ||
     return Ok;
-  } else {
+  } else { // WARNING: only use for checking false negative's (if not, get spammed D:)
+   
+    // std::cout << "failed to find " << key << " at " << i1 // << ", " << i2
+    //           << "\n\t\thv: " << Hash(key, seeds_.at(i1)) << " " // << " (" << hasher_(key, seeds_.at(i1)) << ") "
+    //           // << Hash(key, seeds_.at(i2)) //<< " (" << hasher_(key, seeds_.at(i2)) << ") " 
+    //           << "\n\t\tfp " << tag1 // << " " << tag2
+    //           << "\n\t\tseed: " << seeds_.at(i1) << "\n"; // << " and " << seeds_.at(i2) << "\n";
+    // table_->PrintBucket(i1);
+   
+    //   if (j < 3) std::cout << ", ";
+    // }
+    // std::cout << "\tseed: " << seeds_.at(i1) << "\n";
+    // table_->PrintBucket(i2);
+    // std::cout << "\tseed: " << seeds_.at(i2) << "\n";
     return NotFound;
   }
+   // std::cout << "HV's : [";
+    // for (size_t j = 0; j < 4; j++) {
+    //   if (table_->ReadTag(i1, j) != 0)
+    //     std::cout << Hash(key, seeds_.at(i1));
+    //   else
+    //     std::cout << " ";
 }
 
 template <typename ItemType, size_t bits_per_item, typename HashFamily,
@@ -300,7 +318,10 @@ std::string CuckooFilter<ItemType, bits_per_item, HashFamily, TableType>::Info()
     const {
   std::stringstream ss;
   ss << "CuckooFilter Status:\n"
-     << "\t\t" << table_->Info() << "\n"
+     << "\t\t" << table_->Info()
+     << "\n"
+     //  << "\t\tNumBuckets: " << table_->NumBuckets() << "\n" // same as "Total
+     //  # of rows"
      << "\t\tKeys stored: " << Size() << "\n"
      << "\t\tLoad factor: " << LoadFactor() << "\n"
      << "\t\tHashtable size: " << (table_->SizeInBytes() >> 10) << " KB\n";
