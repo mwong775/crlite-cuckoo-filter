@@ -312,7 +312,7 @@ namespace cuckoohashtable
             // return pos.status == ok;
 
             // omg this outer conditional is necessary if false pos. happen to occur in BOTH buckets - pos1 cannot return yet to check pos2 also
-            // TODO: modify function to determine if one/both buckets rehashed - perhaps std::pair??
+            // TODO: modify function to determine if one/both buckets rehashed - perhaps std::pair?? WAIT JK if index is not important, can just return 0 1 or 2 for # buckets HAH
             if (pos1.status == ok || pos2.status == ok)
             {
                 if (pos1.status == ok)

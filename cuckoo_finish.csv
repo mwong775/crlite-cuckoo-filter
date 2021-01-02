@@ -1,0 +1,110 @@
+insert size, lookup size, init size, max percent load factor
+10000, 1000000, 10526, 95.0
+
+lookup round, false positives, percent fp's
+1, 1183, 0.118300
+2, 390, 0.039000
+3, 149, 0.014900
+4, 62, 0.006200
+5, 25, 0.002500
+6, 7, 0.000700
+7, 1, 0.000100
+8, 0, 0.000000
+
+slot per bucket, bucket count, capacity, load factor
+4, 4096, 16384, 61.04
+
+rehashes per bucket, count
+0, 3111
+1, 667
+2, 198
+3, 71
+4, 31
+5, 12
+6, 5
+7, 1
+
+total rehashes, max rehash, average per bucket, percent rehashed buckets
+1497, 7, 0.3655, 24.048
+
+insert size, lookup size, init size, max percent load factor
+24000, 2400000, 25263, 95.0
+
+lookup round, false positives, percent fp's
+1, 3473, 0.144708
+2, 1231, 0.051292
+3, 472, 0.019667
+4, 177, 0.007375
+5, 76, 0.003167
+6, 20, 0.000833
+7, 11, 0.000458
+8, 5, 0.000208
+9, 2, 0.000083
+10, 3, 0.000125
+11, 1, 0.000042
+12, 0, 0.000000
+
+slot per bucket, bucket count, capacity, load factor
+4, 8192, 32768, 73.24
+
+rehashes per bucket, count
+0, 5460
+1, 1763
+2, 596
+3, 229
+4, 86
+5, 40
+6, 10
+7, 4
+8, 2
+10, 1
+11, 1
+
+total rehashes, max rehash, average per bucket, percent rehashed buckets
+4311, 11, 0.5262, 33.337
+
+insert size, lookup size, init size, max percent load factor
+240000, 24000000, 252631, 95.0
+
+lookup round, false positives, percent fp's
+1, 42870, 0.178625
+2, 21116, 0.087983
+3, 10708, 0.044617
+4, 5226, 0.021775
+5, 2670, 0.011125
+6, 1357, 0.005654
+7, 682, 0.002842
+8, 331, 0.001379
+9, 164, 0.000683
+10, 84, 0.000350
+11, 40, 0.000167
+12, 19, 0.000079
+13, 5, 0.000021
+14, 4, 0.000017
+15, 1, 0.000004
+16, 0, 0.000000
+
+slot per bucket, bucket count, capacity, load factor
+4, 65536, 262144, 91.55
+
+rehashes per bucket, count
+0, 34421
+1, 15791
+2, 7651
+3, 3898
+4, 1834
+5, 945
+6, 499
+7, 264
+8, 122
+9, 52
+10, 33
+11, 12
+12, 9
+13, 2
+14, 2
+15, 1
+
+total rehashes, max rehash, average per bucket, percent rehashed buckets
+61773, 15, 0.9426, 47.469
+
