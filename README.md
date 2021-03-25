@@ -3,7 +3,7 @@ Applying various AMQ (approximate membership query) data structures to effective
 
 ## Overview
 v2
-* Vacuum hashtable
+* Vacuum Hashtable
 * Vacuum Filter
 
 v1
